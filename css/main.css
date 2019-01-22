@@ -39,7 +39,8 @@ header a {
   display: flex;
 }
 
-.login {
+.login,
+.my-page {
   padding-right: 1rem;
 }
 

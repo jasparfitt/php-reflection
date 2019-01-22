@@ -12,7 +12,7 @@
     setcookie('username', '', time() - 3600);
   }
 
-  include 'inc/header.php';
+  include __DIR__.'/../inc/header.php';
   ?>
   <main>
     <div class="margin-box register-page">
@@ -22,8 +22,7 @@
         <p class="error-msg">
           <?php
           echo $_COOKIE["msg"];
-          unset($_COOKIE["msg"]);
-          setcookie('msg', '', time() - 3600);
+          destroyCookie('msg');
           ?>
         </p>
         <?php }?>
@@ -74,4 +73,3 @@
       </form>
     </div>
   </main>
-</body>

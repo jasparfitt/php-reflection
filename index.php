@@ -42,18 +42,29 @@
     // get posted data
     $email = $req->getParsedBody()['email'];
     $password = $req->getParsedBody()['password'];
+    $redirect = $req->getParsedBody()['redirect'];
+    $patternKey = $req->getParsedBody()['pattern-key'];
+    $patternValue = $req->getParsedBody()['pattern-value'];
     // filter posted data
     $cleanEmail = strtolower(filter_var($email, FILTER_SANITIZE_EMAIL));
     $cleanPassword = filter_var($password, FILTER_SANITIZE_STRING);
+    $cleanRedirect = filter_var($redirect, FILTER_SANITIZE_STRING);
+    $cleanPatternKey = filter_var($patternKey, FILTER_SANITIZE_STRING);
+    $cleanPatterValue = filter_var($patternValue, FILTER_SANITIZE_STRING);
     // save email to cookie incase of error
-    setcookie("email", $cleanEmail);
-
+    setcookie("email", $cleanEmail, '/', getenv("COOKIE_DOMAIN"));
+    $errorRedirect = $successRedirect = $cleanRedirect;
+    $pattern = [$cleanPatternKey => $cleanPatterValue];
+    if ($cleanRedirect == 'home') {
+      $errorRedirect = 'login';
+      $pattern = [];
+    }
     // check email and password were both entered
     foreach ($req->getParsedBody() as $key => $value) {
       if (empty($value)) {
         return $res->withStatus(302)
-                   ->withHeader('Location', $app->getContainer()->get('router')->pathFor('login'))
-                   ->withHeader('Set-Cookie', "msg=Please enter a username and password");
+                   ->withHeader('Location', $app->getContainer()->get('router')->pathFor($errorRedirect,$pattern))
+                   ->withHeader('Set-Cookie', "msg=Please enter a username and password; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
       }
     }
     // open database connection
@@ -72,26 +83,25 @@
     // check user was found.
     if (empty($user)) {
       return $res->withStatus(302)
-                 ->withHeader('Location', $app->getContainer()->get('router')->pathFor('login'))
-                 ->withHeader('Set-Cookie', "msg=Password or email invalid");
+                 ->withHeader('Location', $app->getContainer()->get('router')->pathFor($errorRedirect,$pattern))
+                 ->withHeader('Set-Cookie', "msg=Password or email invalid; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
     }
 
     // check passwords match.
     if (!password_verify($cleanPassword, $user['password'])) {
       return $res->withStatus(302)
-                 ->withHeader('Location', $app->getContainer()->get('router')->pathFor('login'))
-                 ->withHeader('Set-Cookie', "msg=Password or email invalid");
+                 ->withHeader('Location', $app->getContainer()->get('router')->pathFor($errorRedirect,$pattern))
+                 ->withHeader('Set-Cookie', "msg=Password or email invalid; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
     }
     // delete email cookie
-    unset($_COOKIE["email"]);
-    setcookie('email', '', time() - 3600);
+    destroyCookie('email');
 
     $expTime = time() + 3600;
-
+    $jwt = makeJWT($expTime, $req, $user);
     // redirect to home
     return $res->withStatus(302)
-               ->withHeader('Location', $app->getContainer()->get('router')->pathFor('home'))
-               ->withHeader('Set-Cookie', "msg=Logon succesful");
+               ->withHeader('Location', $app->getContainer()->get('router')->pathFor($successRedirect,$pattern))
+               ->withHeader('Set-Cookie', "access_token=$jwt; Domain=".getenv("COOKIE_DOMAIN")."; Path=/; Expires=".date(DATE_RSS,$expTime));
   });
 
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
@@ -118,8 +128,8 @@
     $cleanPassword = filter_var($password, FILTER_SANITIZE_STRING);
     $cleanPasswordConfirm = filter_var($passwordConfirm, FILTER_SANITIZE_STRING);
     // save username and email to cookie incase of error
-    setcookie("email", $cleanEmail);
-    setcookie("username", $cleanUsername);
+    setcookie("email", $cleanEmail, '/', getenv("COOKIE_DOMAIN"));
+    setcookie("username", $cleanUsername, '/', getenv("COOKIE_DOMAIN"));
 
     // check all inputs are given
     foreach ($req->getParsedBody() as $key => $value) {
@@ -127,19 +137,18 @@
         if ($key == 'g-recaptcha-response') {
           return $res->withStatus(302)
                      ->withHeader('Location', $app->getContainer()->get('router')->pathFor('register'))
-                     ->withHeader('Set-Cookie', "msg=Please confirm captcha.");
+                     ->withHeader('Set-Cookie', "msg=Please confirm captcha.; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
         }
         return $res->withStatus(302)
                    ->withHeader('Location', $app->getContainer()->get('router')->pathFor('register'))
-                   ->withHeader('Set-Cookie', "msg=All fields are required.");
+                   ->withHeader('Set-Cookie', "msg=All fields are required.; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
       }
     }
 
     // call captcha api
     $url = "https://www.google.com/recaptcha/api/siteverify";
-    $header = "Authorization: Basic NWJhYWYyNTExOTg3NGU0OGExYmM1MzgwMjRlNGI1YTQ6MTU3ZmMzNWI1MTVjNDYzNWJmOWZlZjlhNDkxYjhkMjQ=";
     $body = [
-      'secret' => '6LfZd4sUAAAAAMMwRrMs147L6JbKoDMQ_OYF8EIs',
+      'secret' => getenv("GOOGLE_SECRET"),
       'response' => $captcha
     ];
 
@@ -160,25 +169,25 @@
     if (!$passed) {
       return $res->withStatus(302)
                  ->withHeader('Location', $app->getContainer()->get('router')->pathFor('register'))
-                 ->withHeader('Set-Cookie', "msg=Could not handle this request.");
+                 ->withHeader('Set-Cookie', "msg=Could not handle this request.; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
     }
     // check passwords are same
     if ($cleanPassword != $cleanPasswordConfirm) {
       return $res->withStatus(302)
                  ->withHeader('Location', $app->getContainer()->get('router')->pathFor('register'))
-                 ->withHeader('Set-Cookie', "msg=Passwords do not match.");
+                 ->withHeader('Set-Cookie', "msg=Passwords do not match.; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
     }
     // check for valid email
     if (!filter_var($cleanEmail,FILTER_VALIDATE_EMAIL)) {
       return $res->withStatus(302)
                  ->withHeader('Location', $app->getContainer()->get('router')->pathFor('register'))
-                 ->withHeader('Set-Cookie', "msg=Invalid email.");
+                 ->withHeader('Set-Cookie', "msg=Invalid email.; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
     }
     // check for password length
     if ($cleanPassword > 6) {
       return $res->withStatus(302)
                  ->withHeader('Location', $app->getContainer()->get('router')->pathFor('register'))
-                 ->withHeader('Set-Cookie', "msg=Password must be six characters or longer.");
+                 ->withHeader('Set-Cookie', "msg=Password must be six characters or longer.; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
     }
 
     include __DIR__."\inc\connection.php";
@@ -198,13 +207,13 @@
     if (in_array($cleanEmail, $emailList)) {
       return $res->withStatus(302)
                  ->withHeader('Location', $app->getContainer()->get('router')->pathFor('register'))
-                 ->withHeader('Set-Cookie', "msg=Email already has an account.");
+                 ->withHeader('Set-Cookie', "msg=Email already has an account.; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
     }
     // check if username is already in use
-    if (in_array(strtolower($username), $usernameList)) {
+    if (in_array(strtolower($cleanUsername), $usernameList)) {
       return $res->withStatus(302)
                  ->withHeader('Location', $app->getContainer()->get('router')->pathFor('register'))
-                 ->withHeader('Set-Cookie', "msg=Username already in use.");
+                 ->withHeader('Set-Cookie', "msg=Username already in use.; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
     }
     // hash password for database storage
     $hashedPassword = password_hash($cleanPassword,PASSWORD_BCRYPT);
@@ -221,16 +230,75 @@
     }
 
     // remove username and email cookies due to success
-    unset($_COOKIE["username"]);
-    setcookie('username', '', time() - 3600);
-    unset($_COOKIE["email"]);
-    setcookie('email', '', time() - 3600);
+    destroyCookie('email');
+    destroyCookie('username');
 
     // redirect back to home page
+    $user = [
+      'username' => $cleanUsername,
+      'roleId' => 2
+    ];
+    $expTime = time() + 3600;
+    $jwt = makeJWT($expTime, $req, $user);
+    // redirect to home
     return $res->withStatus(302)
                ->withHeader('Location', $app->getContainer()->get('router')->pathFor('home'))
-               ->withHeader('Set-Cookie', "msg=Successfully created account.");
+               ->withHeader('Set-Cookie', "access_token=$jwt; Domain=".getenv("COOKIE_DOMAIN")."; Path=/; Expires=".date(DATE_RSS,$expTime));
   });
+
+  // ~~~~~~~~~~~~~~~~~~~~ //
+  // GET route for logout //
+  // ~~~~~~~~~~~~~~~~~~~~ //
+  $app->get('/logout', function(Request $req, Response $res) use ($app) {
+    // remove access token
+    unset($_COOKIE["access_token"]);
+    setcookie('access_token', '', time() - 3600, '/', getenv("COOKIE_DOMAIN"));
+    // redirect to homepage
+    return $res->withStatus(302)
+               ->withHeader('Location', $app->getContainer()->get('router')->pathFor('home'));
+  });
+
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+  // GET route for undefined personal page //
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+  $app->get('/personal-page', function (Request $req, Response $res) use ($app) {
+    $userCheck = isAuthenticated();
+    if (!$userCheck) {
+      $redirect = "undefined-personal-page";
+      $res = $this->view->render($res, '/login.php', ['forced' => true, 'redirect' => $redirect]);
+      return $res;
+    } else {
+      $username = strtolower(getUsername());
+      if ($username) {
+        return $res->withStatus(302)
+                   ->withHeader('Location', $app->getContainer()->get('router')->pathFor('personal-page', array('username' => $username)));
+      } else {
+        return $res->withStatus(302)
+                   ->withHeader('Location', $app->getContainer()->get('router')->pathFor('undefined-personal-page'));
+      }
+    }
+  })->setName('undefined-personal-page');
+
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+  // GET route for named personal page //
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+  $app->get('/personal-page/{username}', function(Request $req, Response $res, $args) use ($app) {
+    $username = $args['username'];
+    $userCheck = isAuthenticated($username);
+    $username = getUsername();
+    if ($userCheck) {
+      $res = $this->view->render($res, '/personal-page.php', ['username' => $username]);
+      return $res;
+    }
+    if (isset($_COOKIE['access_token'])) {
+      $res = $this->view->render($res, '/no-access.php');
+      return $res;
+    }
+    $redirect = "personal-page";
+    $pattern_key = 'username';
+    $res = $this->view->render($res, '/login.php', ['forced' => true, 'redirect' => $redirect, 'pattern_key' => $pattern_key, 'pattern_value' => $username]);
+    return $res;
+  })->setName('personal-page');
 
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
   // Redirects and run statement //

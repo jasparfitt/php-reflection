@@ -1,16 +1,25 @@
   <?php
-  include 'inc/header.php';
+  if (!isset($forced)) {
+    $forced = false;
+    $redirect = 'home';
+    $patternKey = '';
+    $patternValue = '';
+  }
+  include __DIR__.'/../inc/header.php';
   ?>
   <main>
     <div class="margin-box login-page">
-      <h1>Login</h1>
+      <?php if ($forced) { ?>
+        <h1>You need to be logged in to view this content</h1>
+      <?php } else { ?>
+        <h1>Login</h1>
+      <?php } ?>
       <form action="/login" method="post">
         <?php if(isset($_COOKIE["msg"])) { ?>
         <p class="error-msg">
           <?php
           echo $_COOKIE["msg"];
-          unset($_COOKIE["msg"]);
-          setcookie('msg', '', time() - 3600);
+          destroyCookie('msg');
           ?>
         </p>
         <?php }?>
@@ -38,7 +47,9 @@
             </td>
           </tr>
         </table>
+        <input type="hidden" name="redirect" value="<?php echo $redirect; ?>">
+        <input type="hidden" name="pattern-key" value="<?php echo $pattern_key; ?>">
+        <input type="hidden" name="pattern-value" value="<?php echo $pattern_value; ?>">
       </form>
     </div>
   </main>
-</body>
