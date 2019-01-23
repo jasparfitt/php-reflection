@@ -3,21 +3,39 @@
 
   use \Psr\Http\Message\ServerRequestInterface as Request;
   use \Psr\Http\Message\ResponseInterface as Response;
-  $app = new \Slim\App();
-  $container = $app->getContainer();
-  $container['logger'] = function($c) {
+
+  $configuration = [
+    'settings' => [
+      'displayErrorDetails' => true,
+    ],
+  ];
+
+  $c = new \Slim\Container($configuration);
+
+  $c['logger'] = function($c) {
     $logger = new \Monolog\Logger('my_logger');
     $file_handler = new \Monolog\Handler\StreamHandler('../logs/app.log');
     $logger->pushHandler($file_handler);
     return $logger;
   };
-  $container['view'] = function ($container) {
+
+  $c['view'] = function ($container) {
     $view = new \Slim\Views\PhpRenderer('./views/');
     $view->parserOptions = array(
       'debug' => true
     );
     return $view;
   };
+
+  $c['notFoundHandler'] = function () {
+    return function (Request $req, Response $res) {
+      include __DIR__."/views/not-found.php";
+      die();
+    };
+  };
+
+  $app = new \Slim\App($c);
+  $container = $app->getContainer();
 
   // ~~~~~~~~~~~~~~~~~~~~~~~ //
   // GET route for home page //
@@ -52,7 +70,7 @@
     $cleanPatternKey = filter_var($patternKey, FILTER_SANITIZE_STRING);
     $cleanPatterValue = filter_var($patternValue, FILTER_SANITIZE_STRING);
     // save email to cookie incase of error
-    setcookie("email", $cleanEmail, '/', getenv("COOKIE_DOMAIN"));
+    setcookie("email", $cleanEmail, time() + 3600, '/', getenv("COOKIE_DOMAIN"));
     $errorRedirect = $successRedirect = $cleanRedirect;
     $pattern = [$cleanPatternKey => $cleanPatterValue];
     if ($cleanRedirect == 'home') {
@@ -96,7 +114,7 @@
     // delete email cookie
     destroyCookie('email');
 
-    $expTime = time() + 3600;
+    $expTime = time() + (60 * 60 * 24);
     $jwt = makeJWT($expTime, $req, $user);
     // redirect to home
     return $res->withStatus(302)
@@ -128,8 +146,8 @@
     $cleanPassword = filter_var($password, FILTER_SANITIZE_STRING);
     $cleanPasswordConfirm = filter_var($passwordConfirm, FILTER_SANITIZE_STRING);
     // save username and email to cookie incase of error
-    setcookie("email", $cleanEmail, '/', getenv("COOKIE_DOMAIN"));
-    setcookie("username", $cleanUsername, '/', getenv("COOKIE_DOMAIN"));
+    setcookie("email", $cleanEmail, time() + 3600, '/', getenv("COOKIE_DOMAIN"));
+    setcookie("username", $cleanUsername, time() + 3600, '/', getenv("COOKIE_DOMAIN"));
 
     // check all inputs are given
     foreach ($req->getParsedBody() as $key => $value) {
@@ -262,17 +280,22 @@
   // GET route for undefined personal page //
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
   $app->get('/personal-page', function (Request $req, Response $res) use ($app) {
+    // check user is logged
     $userCheck = isAuthenticated();
+    // if not logged show log in page
     if (!$userCheck) {
       $redirect = "undefined-personal-page";
       $res = $this->view->render($res, '/login.php', ['forced' => true, 'redirect' => $redirect]);
       return $res;
     } else {
+      // find username
       $username = strtolower(getUsername());
       if ($username) {
+        // if username is found redirect to personal-page/username
         return $res->withStatus(302)
                    ->withHeader('Location', $app->getContainer()->get('router')->pathFor('personal-page', array('username' => $username)));
       } else {
+        // if no username is found redirect to personal-page
         return $res->withStatus(302)
                    ->withHeader('Location', $app->getContainer()->get('router')->pathFor('undefined-personal-page'));
       }
@@ -283,22 +306,229 @@
   // GET route for named personal page //
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
   $app->get('/personal-page/{username}', function(Request $req, Response $res, $args) use ($app) {
+    // check if user is logged in and on their page
     $username = $args['username'];
     $userCheck = isAuthenticated($username);
     $username = getUsername();
+    // if user is logged in and on their page show page
     if ($userCheck) {
       $res = $this->view->render($res, '/personal-page.php', ['username' => $username]);
       return $res;
     }
+    // if user is logged in and on another users page show no-access
     if (isset($_COOKIE['access_token'])) {
       $res = $this->view->render($res, '/no-access.php');
       return $res;
     }
+    // if user is not logged in show log in form
     $redirect = "personal-page";
     $pattern_key = 'username';
     $res = $this->view->render($res, '/login.php', ['forced' => true, 'redirect' => $redirect, 'pattern_key' => $pattern_key, 'pattern_value' => $username]);
     return $res;
   })->setName('personal-page');
+
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+  // GET route for new playlist page //
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+  $app->get('/create-playlist', function(Request $req, Response $res) {
+    // make sure user is logged in
+    $userCheck = isAuthenticated();
+    // if not logged in show log in form
+    if (!$userCheck) {
+      $redirect = "create-playlist";
+      $res = $this->view->render($res, '/login.php', ['forced' => true, 'redirect' => $redirect]);
+      return $res;
+    }
+    // if logged in show the new playlist page
+    $res = $this->view->render($res, '/create-playlist.php');
+    return $res;
+  })->setName('create-playlist');
+
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+  // POST route for new playlist //
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+  $app->post('/create-playlist', function(Request $req, Response $res) use ($app) {
+    // get title, description, and confirmed tracks from posted
+    $title = $req->getParsedBody()['title'];
+    $description = $req->getParsedBody()['description'];
+    $tracks = array();
+    if (isset($req->getParsedBody()['tracks'])) {
+      $tracks = $req->getParsedBody()['tracks'];
+    }
+    $privacy = $req->getParsedBody()['privacy'];
+    // filter inputs
+    $cleanTitle = filter_var($title, FILTER_SANITIZE_STRING);
+    $cleanDesc = filter_var($description, FILTER_SANITIZE_STRING);
+    $cleanPrivacy = filter_var($privacy, FILTER_SANITIZE_STRING);
+    $cleanTracks = array();
+    foreach ($tracks as $track) {
+      $cleanTrack=explode("~#~", filter_var($track, FILTER_SANITIZE_STRING));
+      if (sizeof($cleanTrack) == 2) {
+        $cleanTracks[] =[
+          "title"=>$cleanTrack[0],
+          "artist"=>$cleanTrack[1],
+          "link"=>''
+        ];
+      } else if (sizeof($cleanTrack) > 2) {
+        $cleanTracks[] =[
+          "title"=>$cleanTrack[0],
+          "artist"=>$cleanTrack[1],
+          "link"=>$cleanTrack[2]
+        ];
+      }
+    }
+    // save playlist to cookie incase of redirect
+    $playlist = [
+      "title"=>$cleanTitle,
+      "description"=>$cleanDesc,
+      "tracks"=>$cleanTracks,
+      "privacy"=>$cleanPrivacy
+    ];
+
+    $_SESSION['playlist'] = $playlist;
+
+    if (isset($req->getParsedBody()["add-track"])) {
+      // if playlist is 50 tracks or longer redirect with message
+      if (sizeof($cleanTracks) >= 50) {
+        return $res->withStatus(302)
+                   ->withHeader('Location', $app->getContainer()->get('router')->pathFor('create-playlist'))
+                   ->withHeader('Set-Cookie', "msg=Maximum playlist length reached; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
+      }
+      // if spotify URI is submitted
+      if (isset($req->getParsedBody()['spotify'])) {
+        // get spotify URI from post
+        $URI = $req->getParsedBody()['spotify'];
+        // filter URI
+        $cleanURI = filter_var($URI, FILTER_SANITIZE_STRING);
+        // save cookie incase of redirect
+        setcookie("form", "spotify", time() + 3600, '/', getenv("COOKIE_DOMAIN"));
+        setcookie("URI", $cleanURI, time() + 3600, '/', getenv("COOKIE_DOMAIN"));
+
+        // if URI is empty redirect back to new playlist with message
+        if (empty($cleanURI)) {
+          return $res->withStatus(302)
+                     ->withHeader('Location', $app->getContainer()->get('router')->pathFor('create-playlist'))
+                     ->withHeader('Set-Cookie', "msg=Please enter a valid URI; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
+        }
+
+        $explodedURI = explode(":",$cleanURI);
+        // if URI is not a track redirect with message
+        if ($explodedURI[1] != "track") {
+          return $res->withStatus(302)
+                     ->withHeader('Location', $app->getContainer()->get('router')->pathFor('create-playlist'))
+                     ->withHeader('Set-Cookie', "msg=Please enter a valid URI of a single song; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
+        }
+
+        // get track info from spotify api
+        $spotifyId = $explodedURI[2];
+        $track = getTrack($spotifyId);
+
+        // if no track is returned redirect with message
+        if (empty($track)) {
+          return $res->withStatus(302)
+                     ->withHeader('Location', $app->getContainer()->get('router')->pathFor('create-playlist'))
+                     ->withHeader('Set-Cookie', "msg=Could not get track from spotify. Please enter a valid URI of a single song; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
+        }
+
+        // get song title, artist and link from data
+        $trackName = $track->name;
+        foreach ($track->artists as $artist) {
+          $artistList[] = $artist->name;
+        }
+        $artistName = implode(' & ', $artistList);
+        $spotifyLink = $track->external_urls->spotify;
+      }
+      // if track is submitted manually
+      if (isset($req->getParsedBody()['track-name'])) {
+        // get track and artist from post
+        $trackName = $req->getParsedBody()['track-name'];
+        $artistName = $req->getParsedBody()['artist-name'];
+        // filter input
+        $cleanTrackName = filter_var($trackName, FILTER_SANITIZE_STRING);
+        $cleanArtistName = filter_var($artistName, FILTER_SANITIZE_STRING);
+        // save cookies incase of Redirects
+        setcookie("form", "manual", time() + 3600, '/', getenv("COOKIE_DOMAIN"));
+        setcookie("trackName", $cleanTrackName, time() + 3600, '/', getenv("COOKIE_DOMAIN"));
+        setcookie("artistName", $cleanArtistName, time() + 3600, '/', getenv("COOKIE_DOMAIN"));
+
+        if (empty($cleanArtistName) || empty($cleanTrackName)) {
+          return $res->withStatus(302)
+                     ->withHeader('Location', $app->getContainer()->get('router')->pathFor('create-playlist'))
+                     ->withHeader('Set-Cookie', "msg=Please enter a song title and artist; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
+        }
+        $trackName = $cleanTrackName;
+        $artistName = $cleanArtistName;
+        $spotifyLink = '';
+      }
+
+      // write new track into playlist array
+      $cleanTracks[] = [
+        "title"=>$trackName,
+        "artist"=>$artistName,
+        "link"=>$spotifyLink
+      ];
+      $playlist = [
+        "title"=>$cleanTitle,
+        "description"=>$cleanDesc,
+        "tracks"=>$cleanTracks,
+        "privacy"=>$cleanPrivacy
+      ];
+
+      // save playlist array to cookie
+      session_name('playlist');
+      session_set_cookie_params(3600,'/',getenv("COOKIE_DOMAIN"));
+      session_start();
+      $_SESSION['playlist'] = $playlist;
+      session_write_close();
+      destroyCookie("URI");
+      destroyCookie("trackName");
+      destroyCookie("artistName");
+
+      // redirect back to create playlist page
+      return $res->withStatus(302)
+                 ->withHeader('Location', $app->getContainer()->get('router')->pathFor('create-playlist'));
+    }
+
+    if (isset($req->getParsedBody()["finish"])) {
+      if (empty($cleanTitle)) {
+        return $res->withStatus(302)
+                   ->withHeader('Location', $app->getContainer()->get('router')->pathFor('create-playlist'))
+                   ->withHeader('Set-Cookie', "msg=Playlists must have a title; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
+      }
+      if (empty($privacy) || ($privacy != "public" && $privacy != "private")) {
+        return $res->withStatus(302)
+                   ->withHeader('Location', $app->getContainer()->get('router')->pathFor('create-playlist'))
+                   ->withHeader('Set-Cookie', "msg=Please select either public or private status; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
+      }
+      if (sizeof($cleanTracks) < 1) {
+        return $res->withStatus(302)
+                   ->withHeader('Location', $app->getContainer()->get('router')->pathFor('create-playlist'))
+                   ->withHeader('Set-Cookie', "msg=Playlists must have at least one song in them; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
+      }
+
+      include __DIR__."/inc/connection.php";
+      try {
+        $db->query("CREATE TABLE MyTempTable (
+          trackName text,
+          artistName text
+        )");
+        foreach ($cleanTracks as $track ) {
+          $result = $db->prepare("INSERT INTO MyTempTable (trackName, artistName) VALUES (?, ?)");
+          $result->bindParam(1, $track['title'], PDO::PARAM_STR);
+          $result->bindParam(2, $track['artist'], PDO::PARAM_STR);
+          $result->execute();
+        }
+        $result = $db->query("SELECT * FROM MyTempTable");
+        var_dump($result->fetchAll(PDO::FETCH_ASSOC));
+        die("died");
+      } catch (Exception $e) {
+        echo "bad query".$e->getMessage();
+        die();
+      }
+      return $res->withStatus(302)
+                 ->withHeader('Location', $app->getContainer()->get('router')->pathFor('undefined-personal-page'));
+    }
+  });
 
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
   // Redirects and run statement //
@@ -307,12 +537,3 @@
 
   $app->run();
   ?>
-
-  <footer>
-
-  </footer>
-</body>
-
-<!-- curl -X "POST" -H "Authorization: Basic ZjM4ZjAw...WY0MzE=" -d grant_type=client_credentials https://accounts.spotify.com/api/token -->
-<!-- id 5baaf25119874e48a1bc538024e4b5a4 - NWJhYWYyNTExOTg3NGU0OGExYmM1MzgwMjRlNGI1YTQ= -->
-<!-- sc 157fc35b515c4635bf9fef9a491b8d24 - MTU3ZmMzNWI1MTVjNDYzNWJmOWZlZjlhNDkxYjhkMjQ= -->

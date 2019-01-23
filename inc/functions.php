@@ -16,15 +16,16 @@ function getToken() {
   $context  = stream_context_create($opts);
   $result = file_get_contents($url, false, $context);
   $data = json_decode($result);
-  $data->expires = time() + $data->expires_in;
   return $data;
 }
 
 function getTrack($track) {
   checkToken();
   $url = "https://api.spotify.com/v1/tracks/$track";
+  session_name("token");
+  session_start();
   $header = "Authorization: Bearer ".$_SESSION['token']->access_token;
-
+  session_write_close();
   $opts = array('http' =>
       array(
           'method'  => 'GET',
@@ -38,13 +39,12 @@ function getTrack($track) {
 }
 
 function checkToken () {
-  if (!isset($_SESSION)) {
-    session_name ('token');
-    session_set_cookie_params(3600);
+  if (!isset($_COOKIE['token'])) {
+    session_name('token');
+    session_set_cookie_params(3400,'/',getenv("COOKIE_DOMAIN"));
     session_start();
-  }
-  if (!isset($_SESSION['token'])) {
     $_SESSION['token'] = getToken();
+    session_write_close();
   }
 }
 
@@ -97,5 +97,9 @@ function makeJWT ($expTime, $req, $user) {
 function destroyCookie($name) {
   unset($_COOKIE[$name]);
   setcookie($name, '', time() - 3600, '/', getenv("COOKIE_DOMAIN"));
+}
+
+function confirm () {
+
 }
 ?>

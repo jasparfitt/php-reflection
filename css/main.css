@@ -80,3 +80,7 @@ td {
 .login-page table {
   margin: 0 auto;
 }
+
+.spotify-input {
+  width: 300px;
+}
