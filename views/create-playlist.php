@@ -6,6 +6,7 @@ if (!isset($_COOKIE["playlist"])) {
   $privacy = "public";
 } else {
   session_name('playlist');
+  session_id("playlist");
   session_start();
   $title = $_SESSION['playlist']['title'];
   $description = $_SESSION['playlist']['description'];

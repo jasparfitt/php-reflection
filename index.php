@@ -115,7 +115,7 @@
     destroyCookie('email');
 
     $expTime = time() + (60 * 60 * 24);
-    $jwt = makeJWT($expTime, $req, $user);
+    $jwt = makeJWT($expTime, $req, $user, $user["userId"]);
     // redirect to home
     return $res->withStatus(302)
                ->withHeader('Location', $app->getContainer()->get('router')->pathFor($successRedirect,$pattern))
@@ -242,6 +242,9 @@
       $result->bindParam(2, $hashedPassword, PDO::PARAM_STR);
       $result->bindParam(3, $cleanEmail, PDO::PARAM_STR);
       $added = $result->execute();
+      $result = $db->prepare("SELECT userId FROM users WHERE email = ?;");
+      $result->bindParam(1, $cleanEmail, PDO::PARAM_STR);
+      $userId = $result->fetch()["userId"];
     } catch (Exception $e) {
       echo "Query failed: " . $e->getMessage();
       die();
@@ -257,7 +260,7 @@
       'roleId' => 2
     ];
     $expTime = time() + 3600;
-    $jwt = makeJWT($expTime, $req, $user);
+    $jwt = makeJWT($expTime, $req, $user, $userId);
     // redirect to home
     return $res->withStatus(302)
                ->withHeader('Location', $app->getContainer()->get('router')->pathFor('home'))
@@ -307,12 +310,13 @@
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
   $app->get('/personal-page/{username}', function(Request $req, Response $res, $args) use ($app) {
     // check if user is logged in and on their page
-    $username = $args['username'];
+    $username = filter_var($args['username'], FILTER_SANITIZE_STRING);
     $userCheck = isAuthenticated($username);
     $username = getUsername();
+    $userId = getUserId();
     // if user is logged in and on their page show page
     if ($userCheck) {
-      $res = $this->view->render($res, '/personal-page.php', ['username' => $username]);
+      $res = $this->view->render($res, '/personal-page.php', ['username' => $username, "userId" => $userId]);
       return $res;
     }
     // if user is logged in and on another users page show no-access
@@ -385,7 +389,12 @@
       "privacy"=>$cleanPrivacy
     ];
 
+    session_name('playlist');
+    session_id("playlist");
+    session_set_cookie_params(3600,'/',getenv("COOKIE_DOMAIN"));
+    session_start();
     $_SESSION['playlist'] = $playlist;
+    session_write_close();
 
     if (isset($req->getParsedBody()["add-track"])) {
       // if playlist is 50 tracks or longer redirect with message
@@ -476,6 +485,7 @@
 
       // save playlist array to cookie
       session_name('playlist');
+      session_id("playlist");
       session_set_cookie_params(3600,'/',getenv("COOKIE_DOMAIN"));
       session_start();
       $_SESSION['playlist'] = $playlist;
@@ -490,44 +500,242 @@
     }
 
     if (isset($req->getParsedBody()["finish"])) {
+      // check user is logged in and get username, if not redirect
+      if (isAuthenticated()) {
+        $userId = getUserId();
+        if ($userId === false) {
+          return $res->withStatus(302)
+                     ->withHeader('Location', $app->getContainer()->get('router')->pathFor('create-playlist'));
+        }
+      } else {
+        return $res->withStatus(302)
+                   ->withHeader('Location', $app->getContainer()->get('router')->pathFor('create-playlist'));
+      }
+
+      // check that playlist has title
       if (empty($cleanTitle)) {
         return $res->withStatus(302)
                    ->withHeader('Location', $app->getContainer()->get('router')->pathFor('create-playlist'))
                    ->withHeader('Set-Cookie', "msg=Playlists must have a title; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
       }
+      // check that privacy is set
       if (empty($privacy) || ($privacy != "public" && $privacy != "private")) {
         return $res->withStatus(302)
                    ->withHeader('Location', $app->getContainer()->get('router')->pathFor('create-playlist'))
                    ->withHeader('Set-Cookie', "msg=Please select either public or private status; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
       }
+      // check that playlist has songs in it
       if (sizeof($cleanTracks) < 1) {
         return $res->withStatus(302)
                    ->withHeader('Location', $app->getContainer()->get('router')->pathFor('create-playlist'))
                    ->withHeader('Set-Cookie', "msg=Playlists must have at least one song in them; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
       }
 
+      // open connection to database
       include __DIR__."/inc/connection.php";
+
       try {
-        $db->query("CREATE TABLE MyTempTable (
-          trackName text,
-          artistName text
-        )");
-        foreach ($cleanTracks as $track ) {
-          $result = $db->prepare("INSERT INTO MyTempTable (trackName, artistName) VALUES (?, ?)");
-          $result->bindParam(1, $track['title'], PDO::PARAM_STR);
-          $result->bindParam(2, $track['artist'], PDO::PARAM_STR);
-          $result->execute();
+        // get playlist names for user ID
+        $result = $db->prepare("SELECT name FROM playlists WHERE userId = ?;");
+        $result->bindParam(1, $userId, PDO::PARAM_INT);
+        $result->execute();
+        $playlists = $result->fetchAll(PDO::FETCH_ASSOC);
+        $names = array();
+        foreach ($playlists as $name ) {
+          $names[]=$name["name"];
         }
-        $result = $db->query("SELECT * FROM MyTempTable");
-        var_dump($result->fetchAll(PDO::FETCH_ASSOC));
-        die("died");
+        // check new title is not in use
+        if (in_array($cleanTitle, $names)) {
+          return $res->withStatus(302)
+                     ->withHeader('Location', $app->getContainer()->get('router')->pathFor('create-playlist'))
+                     ->withHeader('Set-Cookie', "msg=You already have a playlist with that name; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
+        }
       } catch (Exception $e) {
         echo "bad query".$e->getMessage();
-        die();
+        die('died');
+      }
+      try {
+        // create temp table to store playlist songs
+        $db->query("
+        CREATE TEMPORARY TABLE MyTempTable
+        (
+          trackName text,
+          artistName text,
+          link text
+        )
+        ");
+        // add songs to temp table
+        foreach ($cleanTracks as $track ) {
+          if(empty($track['link'])) {
+            $link = null;
+          } else {
+            $link = $track['link'];
+          }
+          $result = $db->prepare("
+          INSERT INTO MyTempTable (trackName, artistName, link) VALUES (?, ?, ?);
+          ");
+          $result->bindParam(1, $track['title'], PDO::PARAM_STR);
+          $result->bindParam(2, $track['artist'], PDO::PARAM_STR);
+          $result->bindParam(3, $link, PDO::PARAM_STR);
+          $result->execute();
+        }
+        // find songs alredy in tracks table
+        $result = $db->query("
+          SELECT MyTempTable.trackName AS track, MyTempTable.artistName AS artist, tracks.trackId AS trackId, tracks.spotifyLink AS link FROM MyTempTable
+          INNER JOIN tracks AS tracks1 ON MyTempTable.trackName = tracks1.trackName
+          INNER JOIN tracks ON MyTempTable.artistName = tracks.artistName
+          WHERE tracks1.trackId = tracks.trackId;
+        ");
+        $presentSongs = $result->fetchAll(PDO::FETCH_ASSOC);
+
+        $songsToAdd = array();
+        $songsToUpdate = array();
+        $songsAlreadyIn = array();
+        // seperate songs in playlist into songs to add to database, songs to be updated, and songs already in database
+        foreach ($cleanTracks as $track) {
+          $songsToAdd[] = $track;
+          foreach($presentSongs as $noAdd) {
+            if ($track['title'] == $noAdd['track'] && $track['artist'] == $noAdd['artist']) {
+              array_pop($songsToAdd);
+              if (!empty($track['link']) && empty($noAdd['link'])) {
+                $noAdd['link'] = $track["link"];
+                $songsToUpdate[] = $noAdd;
+              } else {
+                $songsAlreadyIn[] = $noAdd;
+              }
+              break;
+            }
+          }
+        }
+
+        // add new songs to database
+        foreach ($songsToAdd as $song) {
+          if(empty($song['link'])) {
+            $link = null;
+          } else {
+            $link = $song['link'];
+          }
+          $result = $db->prepare("
+          INSERT INTO Tracks (trackName, artistName, spotifyLink) VALUES (?, ?, ?);
+          ");
+          $result->bindParam(1, $song['title'], PDO::PARAM_STR);
+          $result->bindParam(2, $song['artist'], PDO::PARAM_STR);
+          $result->bindParam(3, $link, PDO::PARAM_STR);
+          $result->execute();
+        }
+
+        // update existing songs in database
+        foreach ($songsToUpdate as $song) {
+          $result = $db->prepare("UPDATE tracks SET spotifyLink = ? WHERE trackId = ?;");
+          $result->bindParam(1, $song['link'], PDO::PARAM_STR);
+          $result->bindParam(2, $song['trackId1'], PDO::PARAM_INT);
+          $result->execute();
+        }
+
+        // find list of track ids
+        $result = $db->query("
+          SELECT tracks.trackId AS trackId FROM MyTempTable
+          INNER JOIN tracks AS tracks1 ON MyTempTable.trackName = tracks1.trackName
+          INNER JOIN tracks ON MyTempTable.artistName = tracks.artistName
+          WHERE tracks1.trackId = tracks.trackId;
+        ");
+        $idList = $result->fetchAll(PDO::FETCH_ASSOC);
+
+        // make playlist in database
+        $result = $db->prepare("INSERT INTO playlists (name, userId, description, privacy) VALUES (?, ?, ?, ?);");
+        $result->bindParam(1, $cleanTitle, PDO::PARAM_STR);
+        $result->bindParam(2, $userId, PDO::PARAM_INT);
+        $result->bindParam(3, $cleanDesc, PDO::PARAM_STR);
+        $result->bindParam(4, $cleanPrivacy, PDO::PARAM_STR);
+        $result->execute();
+
+        // find playlist ID
+        $result = $db->prepare("SELECT playlistId FROM playlists WHERE name = ? && userId = ?");
+        $result->bindParam(1, $cleanTitle, PDO::PARAM_STR);
+        $result->bindParam(2, $userId, PDO::PARAM_STR);
+        $result->execute();
+        $playlistId = $result->fetch()["playlistId"];
+
+        // link tracks to playlist
+        foreach ($idList as $id) {
+          $result = $db->prepare("INSERT INTO playlistsTracks (playlistId, trackId) VALUES (?, ?);");
+          $result->bindParam(1, $playlistId, PDO::PARAM_INT);
+          $result->bindParam(2, $id["trackId"], PDO::PARAM_INT);
+          $result->execute();
+        }
+      } catch (Exception $e) {
+        echo "bad query".$e->getMessage();
+        die('died');
       }
       return $res->withStatus(302)
                  ->withHeader('Location', $app->getContainer()->get('router')->pathFor('undefined-personal-page'));
     }
+  });
+
+  // ~~~~~~~~~~~~~~~~~~~~~~~~ //
+  // GET route for playlists  //
+  // ~~~~~~~~~~~~~~~~~~~~~~~~ //
+  $app->get('/playlist/{id}', function(Request $req, Response $res, $args) {
+    $playlistId = filter_var($args["id"], FILTER_SANITIZE_NUMBER_INT);
+    include __DIR__."/inc/connection.php";
+    try {
+      $result = $db->prepare("SELECT privacy, userId FROM playlists WHERE playlistId = ?;");
+      $result->bindParam(1, $playlistId, PDO::PARAM_INT);
+      $result->execute();
+      $data = $result->fetch(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+      echo "bad query ".$e->getMessage();
+      die("died");
+    }
+    if (empty($data)) {
+      $res = $this->view->render($res, '/not-found.php');
+      return $res;
+    }
+    $privacy = $data["privacy"];
+    $playlistUserId = $data["userId"];
+    if ($privacy == "private") {
+      if (!isAuthenticated()) {
+        $redirect = "playlist";
+        $pattern_key = "id";
+        $res = $this->view->render($res, '/login.php', ['forced' => true, 'redirect' => $redirect, 'pattern_key' => $pattern_key, 'pattern_value' => $playlistId]);
+        return $res;
+      }
+      $userId = getUserId();
+      if ($userId === false) {
+        return $res->withStatus(302)
+                   ->withHeader('Location', $app->getContainer()->get('router')->pathFor('playlist',["id" => $playlistId]));
+      }
+      if ($userId != $playlistUserId) {
+        $res = $this->view->render($res, '/no-access.php');
+        return $res;
+      }
+    }
+    $result = $db->prepare("
+      SELECT username, name, description, privacy, trackName, artistName, spotifyLink FROM playlists
+      INNER JOIN users ON playlists.userId = users.userId
+      INNER JOIN playlistsTracks ON playlists.playlistId = playlistsTracks.playlistId
+      INNER JOIN tracks ON playlistsTracks.trackId = tracks.trackId
+      WHERE playlists.playlistId = ?;
+    ");
+    $result->bindParam(1, $playlistId, PDO::PARAM_INT);
+    $result->execute();
+    $playlist = $result->fetchAll(PDO::FETCH_ASSOC);
+    $res = $this->view->render($res, '/playlist.php', ["playlist" => $playlist]);
+    return $res;
+  })->setName("playlist");
+
+  // ~~~~~~~~~~~~~~~~~~~~~~~~ //
+  // PUT route for playlists  //
+  // ~~~~~~~~~~~~~~~~~~~~~~~~ //
+  $app->put('/playlist/{id}', function(Request $req, Response $res) {
+
+  });
+
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+  // DELETE route for playlists  //
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+  $app->delete('/playlist/{id}', function(Request $req, Response $res) {
+
   });
 
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~ //

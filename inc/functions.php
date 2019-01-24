@@ -21,26 +21,38 @@ function getToken() {
 
 function getTrack($track) {
   checkToken();
-  $url = "https://api.spotify.com/v1/tracks/$track";
-  session_name("token");
-  session_start();
-  $header = "Authorization: Bearer ".$_SESSION['token']->access_token;
-  session_write_close();
-  $opts = array('http' =>
-      array(
-          'method'  => 'GET',
-          'header'  => $header
-      )
-  );
-  $context  = stream_context_create($opts);
-  $result = file_get_contents($url, false, $context);
-  $data = json_decode($result);
-  return $data;
+  try {
+    $url = "https://api.spotify.com/v1/tracks/$track";
+    session_name("token");
+    session_id("token");
+    session_start();
+    $header = "Authorization: Bearer ".$_SESSION['token']->access_token;
+    var_dump($_SESSION['token']);
+    session_write_close();
+    $opts = array('http' =>
+        array(
+            'method'  => 'GET',
+            'header'  => $header
+        )
+    );
+    $context  = stream_context_create($opts);
+    $result = file_get_contents($url, false, $context);
+    $data = json_decode($result);
+    return $data;
+  } catch (Exception $e) {
+    session_name('token');
+    session_id("token");
+    session_set_cookie_params(3400,'/',getenv("COOKIE_DOMAIN"));
+    session_start();
+    $_SESSION['token'] = getToken();
+    session_write_close();
+  }
 }
 
 function checkToken () {
   if (!isset($_COOKIE['token'])) {
     session_name('token');
+    session_id("token");
     session_set_cookie_params(3400,'/',getenv("COOKIE_DOMAIN"));
     session_start();
     $_SESSION['token'] = getToken();
@@ -81,14 +93,26 @@ function getUsername() {
   }
 }
 
-function makeJWT ($expTime, $req, $user) {
+function getUserId() {
+  try {
+    \Firebase\JWT\JWT::$leeway = 1;
+    $decoded_jwt=\Firebase\JWT\JWT::decode($_COOKIE['access_token'], getenv("SITE_SECRET"), array('HS256'));
+    return $decoded_jwt->userId;
+  } catch (Exception $e) {
+    destroyCookie('access_token');
+    return false;
+  }
+}
+
+function makeJWT ($expTime, $req, $user, $userId) {
   $token = array(
     'iss' => $req->getUri()->getBaseUrl(),
     'sub' => $user['username'],
     'exp' => $expTime,
     'iat' => time(),
     'nbf' => time(),
-    'is_admin' => $user['roleId'] == 1
+    'is_admin' => $user['roleId'] == 1,
+    'userId' => $userId
   );
   $jwt = \Firebase\JWT\JWT::encode($token, getenv("SITE_SECRET"), 'HS256');
   return $jwt;
