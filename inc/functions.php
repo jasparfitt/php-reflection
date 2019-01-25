@@ -19,15 +19,16 @@ function getToken() {
   return $data;
 }
 
-function getTrack($track) {
+function getTrack($track, $logger, $redirect = false) {
   checkToken();
   try {
     $url = "https://api.spotify.com/v1/tracks/$track";
     session_name("token");
     session_id("token");
     session_start();
-    $header = "Authorization: Bearer ".$_SESSION['token']->access_token;
-    var_dump($_SESSION['token']);
+    $logger->addInfo($_SESSION["token"]->access_token);
+    $header = "Content-Type: application/x-www-form-urlencoded\n".
+              "Authorization: Bearer ".$_SESSION['token']->access_token;
     session_write_close();
     $opts = array('http' =>
         array(
@@ -35,17 +36,33 @@ function getTrack($track) {
             'header'  => $header
         )
     );
+    set_error_handler(function($errno, $errstr, $errfile, $errline, array $errcontext) {
+      // error was suppressed with the @-operator
+      if (0 === error_reporting()) {
+          return false;
+      }
+
+      throw new ErrorException($errstr, 0, $errno, $errfile, $errline);
+    });
     $context  = stream_context_create($opts);
     $result = file_get_contents($url, false, $context);
     $data = json_decode($result);
+    restore_error_handler();
     return $data;
   } catch (Exception $e) {
-    session_name('token');
-    session_id("token");
-    session_set_cookie_params(3400,'/',getenv("COOKIE_DOMAIN"));
-    session_start();
-    $_SESSION['token'] = getToken();
-    session_write_close();
+    restore_error_handler();
+    $message = $e->getMessage();
+    if ($redirect) {
+      echo $e->getMessage();
+      die("died from exception");
+    }
+    if (strpos($message, "401") !== false) {
+      destroyCookie('token');
+      getTrack($track, $logger, true);
+    } else {
+      echo $e->getMessage();
+      die("died from exception");
+    }
   }
 }
 
@@ -56,6 +73,7 @@ function checkToken () {
     session_set_cookie_params(3400,'/',getenv("COOKIE_DOMAIN"));
     session_start();
     $_SESSION['token'] = getToken();
+    var_dump($_SESSION['token']);
     session_write_close();
   }
 }
@@ -119,11 +137,40 @@ function makeJWT ($expTime, $req, $user, $userId) {
 }
 
 function destroyCookie($name) {
-  unset($_COOKIE[$name]);
   setcookie($name, '', time() - 3600, '/', getenv("COOKIE_DOMAIN"));
+  unset($_COOKIE[$name]);
 }
 
-function confirm () {
+function getPlaylistOwner ($playlistId) {
+  include __DIR__."/connection.php";
+  try {
+    $result = $db->prepare("SELECT privacy, userId FROM playlists WHERE playlistId = ?;");
+    $result->bindParam(1, $playlistId, PDO::PARAM_INT);
+    $result->execute();
+    return $result->fetch(PDO::FETCH_ASSOC);
+  } catch (Exception $e) {
+    echo "bad query ".$e->getMessage();
+    die("died");
+  }
+}
 
+function findUniqueSongs ($cleanTracks) {
+  $uniqueTracks = array();
+  foreach ($cleanTracks as $song) {
+    $add = true;
+    foreach ($uniqueTracks as $checkedSong) {
+      if ($song['title'] == $checkedSong["title"] && $song["artist"] == $checkedSong["artist"]) {
+        $add = false;
+        if (empty($checkedSong['link']) && !empty($song['link'])) {
+          $key = array_search($checkedSong, $uniqueTracks);
+          $uniqueTracks[$key]["link"] = $song['link'];
+        }
+      }
+    }
+    if ($add) {
+      $uniqueTracks[] = $song;
+    }
+  }
+  return $uniqueTracks;
 }
 ?>

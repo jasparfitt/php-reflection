@@ -5,8 +5,12 @@
     <?php
       if ($playlist[0]["username"] == getUsername()) {
         ?>
-        <button>Delete</button>
-        <button>Edit</button>
+        <form method="post" action="/delete/<?php echo $playlist[0]["playlistId"]; ?>">
+          <input name="delete" type="submit" value="Delete">
+        </form>
+        <form method="get" action="/edit/<?php echo $playlist[0]["playlistId"]; ?>">
+          <input name="edit" value="Edit" type="submit">
+        </form>
         <?php
       }
     ?>

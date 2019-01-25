@@ -42,8 +42,12 @@ include __DIR__.'/../inc/header.php';
               </div>
             </div>
             <div class="playlist-control">
-              <button>Delete</button>
-              <button>Edit</button>
+              <form method="post" action="/delete/<?php echo $playlist["playlistId"]; ?>">
+                <button name="delete">Delete</button>
+              </form>
+              <form method="get" action="/edit/<?php echo $playlist["playlistId"]; ?>">
+                <button name="edit">Edit</button>
+              </form>
             </div>
           </li>
           <?php

@@ -7,6 +7,7 @@ if (!isset($_COOKIE["playlist"])) {
 } else {
   session_name('playlist');
   session_id("playlist");
+  session_set_cookie_params(3600,'/',getenv("COOKIE_DOMAIN"));
   session_start();
   $title = $_SESSION['playlist']['title'];
   $description = $_SESSION['playlist']['description'];
@@ -15,7 +16,6 @@ if (!isset($_COOKIE["playlist"])) {
   session_write_close();
   destroyCookie("playlist");
 }
-
 $URI = '';
 $trackName = '';
 $artistName = '';
@@ -33,7 +33,7 @@ include __DIR__.'/../inc/header.php';
 ?>
 <main>
   <div class='margin-box'>
-    <h1>Add a New Playlist</h1>
+    <h1><?php echo $name; ?></h1>
     <?php if(isset($_COOKIE["msg"])) { ?>
     <p class="error-msg">
       <?php
@@ -42,7 +42,7 @@ include __DIR__.'/../inc/header.php';
       ?>
     </p>
     <?php }?>
-      <form method="post" action="/create-playlist">
+      <form method="post" action="<?php echo $postTo; ?>">
         <table>
           <tbody id="track-list">
             <tr>
@@ -78,11 +78,11 @@ include __DIR__.'/../inc/header.php';
                 if (isset($_COOKIE['form'])) {
                   if ($_COOKIE['form'] == "spotify") {
                     ?>
-                    <span id="inputs"><input type="submit" name="add-track" value="+"><input name="spotify" type="text" placeholder="Spotify URI" class="spotify-input" value="<?php echo $URI; ?>"><button onclick="goBack()">X</button></span>
+                    <span id="inputs"><input type="submit" formaction="/add" name="add-track" value="+"><input name="spotify" type="text" placeholder="Spotify URI" class="spotify-input" value="<?php echo $URI; ?>"><button onclick="goBack()">X</button></span>
                     <?php
                   } else if ($_COOKIE['form'] == "manual") {
                     ?>
-                    <span id="inputs"><input type="submit" name="add-track" value="+"><input name="track-name" type="text" placeholder="Song Title" value="<?php echo $trackName; ?>"><input name="artist-name" type="text" placeholder="Artist" value="<?php echo $artistName; ?>"><button onclick="goBack()">X</button></span>
+                    <span id="inputs"><input type="submit" formaction="/add" name="add-track" value="+"><input name="track-name" type="text" placeholder="Song Title" value="<?php echo $trackName; ?>"><input name="artist-name" type="text" placeholder="Artist" value="<?php echo $artistName; ?>"><button onclick="goBack()">X</button></span>
                     <?php
                   }
                 } else {
@@ -100,6 +100,9 @@ include __DIR__.'/../inc/header.php';
           </tbody>
         </table>
         <input type="submit" value="Save Playlist" name="finish"/>
+        <input type="hidden" name="redirect" value="<?php echo $redirect; ?>">
+        <input type="hidden" name="pattern-key" value="<?php echo $pattern_key; ?>">
+        <input type="hidden" name="pattern-value" value="<?php echo $pattern_value; ?>">
       </form>
   </div>
 </main>
@@ -160,6 +163,7 @@ include __DIR__.'/../inc/header.php';
     let confirmButton = document.createElement('input');
     confirmButton.setAttribute('type',"submit");
     confirmButton.setAttribute('name',"add-track");
+    confirmButton.setAttribute("formaction", "/add")
     confirmButton.setAttribute('value',"+");
     return confirmButton;
   }
@@ -185,9 +189,6 @@ include __DIR__.'/../inc/header.php';
   }
 
   let deleteTrack = (id) => {
-    console.log("deleting")
-    // let track = document.getElementById("track");
-    // remove(track,"button");
     let trackList = document.getElementById("track-list");
     remove(trackList, id);
   }
