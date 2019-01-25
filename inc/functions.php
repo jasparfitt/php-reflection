@@ -101,6 +101,9 @@ function isAuthenticated ($username = null) {
 }
 
 function getUsername() {
+  if (!isset($_COOKIE["access_token"])) {
+    return false;
+  }
   try {
     \Firebase\JWT\JWT::$leeway = 1;
     $decoded_jwt=\Firebase\JWT\JWT::decode($_COOKIE['access_token'], getenv("SITE_SECRET"), array('HS256'));
@@ -112,6 +115,9 @@ function getUsername() {
 }
 
 function getUserId() {
+  if (!isset($_COOKIE["access_token"])) {
+    return false;
+  }
   try {
     \Firebase\JWT\JWT::$leeway = 1;
     $decoded_jwt=\Firebase\JWT\JWT::decode($_COOKIE['access_token'], getenv("SITE_SECRET"), array('HS256'));

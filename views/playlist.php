@@ -11,6 +11,12 @@
         <form method="get" action="/edit/<?php echo $playlist[0]["playlistId"]; ?>">
           <input name="edit" value="Edit" type="submit">
         </form>
+        <form method="post" action="/like/<?php echo $playlist[0]["playlistId"]; ?>">
+          <input name="like" value="Like" type="submit" class="<?php if (isset($playlist["userLikes"])) {echo "disabled";} ?>">
+        </form>
+        <form method="post" action="/save/<?php echo $playlist[0]["playlistId"]; ?>">
+          <input name="save" value="Save" type="submit">
+        </form>
         <?php
       }
     ?>

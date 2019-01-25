@@ -94,7 +94,7 @@ td {
   margin-right: 1rem;
 }
 
-.user-playlists .new-item {
+.user-playlists li:last-child {
   border-bottom: none;
 }
 
@@ -110,11 +110,18 @@ td {
 .playlist-header {
   display: flex;
   margin-bottom: 0.5rem;
+  align-content: center;
+  justify-content: center;
 }
 
 .playlist-title {
   font-size: 1.5em;
   margin: 0;
+  margin-right: .5rem;
+}
+
+.playlist-author {
+  margin: auto 0;
   margin-right: 1.5rem;
 }
 
@@ -129,4 +136,8 @@ td {
   background: #ccc;
   padding: 3px 7px;
   border-radius: 5px;
+}
+
+.disabled {
+  color: #999;
 }

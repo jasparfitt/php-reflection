@@ -41,7 +41,51 @@
   // GET route for home page //
   // ~~~~~~~~~~~~~~~~~~~~~~~ //
   $app->get('/home', function (Request $req, Response $res) {
-    $res = $this->view->render($res, '/home.php');
+    // get userId if logged in
+    $userId = getUserId();
+    // include connection to db
+    include __DIR__."/inc/connection.php";
+    if ($userId === false) {
+      // if user is not logged in find 10 most liked playlists
+      $result = $db->query("
+        SELECT playlists.playlistId, COUNT(likes.userId) AS NoL, name, description, username FROM playlists
+        LEFT OUTER JOIN likes ON likes.playlistId = playlists.playlistId
+        INNER JOIN users ON playlists.userId = users.userId
+        WHERE privacy = 'public'
+        GROUP BY playlistId
+        ORDER BY nol DESC, RAND()
+        LIMIT 10;
+      ");
+    } else {
+      // if user is logged in find 10 most liked playlists plus if user likes them
+      $result = $db->prepare("
+        SELECT
+          playlists.playlistId,
+          COUNT(likes.userId) AS NoL,
+          name,
+          description,
+          username,
+          userLikes.userId AS userLikes
+        FROM playlists
+        LEFT OUTER JOIN likes
+          ON likes.playlistId = playlists.playlistId
+        INNER JOIN users
+          ON playlists.userId = users.userId
+        LEFT OUTER JOIN (
+          SELECT * FROM likes
+          WHERE userId = ?
+        ) AS userLikes
+          ON userLikes.playlistId = playlists.playlistId
+        WHERE privacy = 'public'
+        GROUP BY playlistId
+        ORDER BY nol DESC, RAND()
+        LIMIT 10;
+      ");
+      $result->bindParam(1, $userId, PDO::PARAM_INT);
+      $result->execute();
+    }
+    $playlists = $result->fetchAll(PDO::FETCH_ASSOC);
+    $res = $this->view->render($res, '/home.php',["playlists"=>$playlists]);
     return $res;
   })->setName('home');
 
@@ -724,9 +768,9 @@
                ->withHeader('Location', $app->getContainer()->get('router')->pathFor('playlist',["id"=>$playlistId]));
   });
 
-  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
   // GET route for editing playlists  //
-  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
   $app->get('/edit/{id}', function(Request $req, Response $res, $args) use ($app) {
     $playlistId = filter_var($args["id"], FILTER_SANITIZE_NUMBER_INT);
     $userId = getUserId();
@@ -818,6 +862,54 @@
     $result->execute();
     return $res->withStatus(302)
                ->withHeader('Location', $app->getContainer()->get('router')->pathFor('undefined-personal-page'));
+  });
+
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+  // POST route for liking playlists  //
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+  $app->post('/like/{id}', function(Request $req, Response $res, $args) use ($app) {
+    // get posted data
+    $playlistId = filter_var($args["id"], FILTER_SANITIZE_STRING);
+    $redirect = $req->getParsedBody()['redirect'];
+    $patternKey = $req->getParsedBody()['pattern-key'];
+    $patternValue = $req->getParsedBody()['pattern-value'];
+    // filter inputs
+    $cleanRedirect = filter_var($redirect, FILTER_SANITIZE_STRING);
+    $cleanPatternKey = filter_var($patternKey, FILTER_SANITIZE_STRING);
+    $cleanPatterValue = filter_var($patternValue, FILTER_SANITIZE_STRING);
+    // create redirect pattern
+    $pattern = [$cleanPatternKey => $cleanPatterValue];
+    $userId = getUserId();
+    if ($userId === false) {
+      $redirect = "playlist";
+      $pattern_key = "id";
+      $res = $this->view->render($res, '/login.php', ['forced' => true, 'redirect' => $redirect, 'pattern_key' => $pattern_key, 'pattern_value' => $playlistId]);
+      return $res;
+    }
+    include __DIR__."/inc/connection.php";
+    try {
+      $result = $db->prepare("SELECT * FROM likes WHERE userId = ? && playlistId = ?;");
+      $result->bindParam(1, $userId, PDO::PARAM_INT);
+      $result->bindParam(2, $playlistId, PDO::PARAM_INT);
+      $result->execute();
+      $liked = $result->fetch(PDO::FETCH_ASSOC);
+      if (!empty($liked)) {
+        $result = $db->prepare("DELETE FROM likes WHERE userId = ? && playlistId = ?;");
+        $result->bindParam(1, $userId, PDO::PARAM_INT);
+        $result->bindParam(2, $playlistId, PDO::PARAM_INT);
+        $result->execute();
+      } else {
+        $result = $db->prepare("INSERT INTO likes (userId, playlistId) VALUES (?, ?);");
+        $result->bindParam(1, $userId, PDO::PARAM_INT);
+        $result->bindParam(2, $playlistId, PDO::PARAM_INT);
+        $result->execute();
+      }
+    } catch (Exception $e) {
+      echo "bad request".$e->getMessage();
+      die("died");
+    }
+    return $res->withStatus(302)
+               ->withHeader('Location', $app->getContainer()->get('router')->pathFor($redirect, $pattern));
   });
 
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
