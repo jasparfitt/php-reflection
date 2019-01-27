@@ -193,4 +193,8 @@ include __DIR__.'/../inc/header.php';
     remove(trackList, id);
   }
 
+  let getTrack = () => {
+    
+  }
+
 </script>

@@ -42,12 +42,17 @@ header a {
 .login,
 .my-page {
   padding-right: 1rem;
+  padding-left: 1rem;
 }
 
 .nav-item {
   display: flex;
   flex-direction: column;
   justify-content: center;
+}
+
+.nav-item form {
+  margin: 0;
 }
 
 .label {
@@ -94,7 +99,7 @@ td {
   margin-right: 1rem;
 }
 
-.user-playlists li:last-child {
+.playlists li:last-child {
   border-bottom: none;
 }
 
@@ -102,7 +107,7 @@ td {
   width: 300px;
 }
 
-.user-playlists {
+.playlists {
   border: solid gray 1px;
   border-radius: 10px;
 }
@@ -111,7 +116,6 @@ td {
   display: flex;
   margin-bottom: 0.5rem;
   align-content: center;
-  justify-content: center;
 }
 
 .playlist-title {

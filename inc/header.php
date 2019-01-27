@@ -14,6 +14,12 @@
           <h4 class='logo-subheading'>Create and discover new playlists</h4>
         </a>
       </li>
+      <li class="nav-item">
+        <form method="get" action="search">
+          <input type="text" name="search" placeholder="search"/>
+          <input type="submit" value="Go" />
+        </form>
+      </li>
       <?php if (isset($_COOKIE['access_token'])) { ?>
         <li class="nav-item my-page">
           <a href="/personal-page">My Page</a>

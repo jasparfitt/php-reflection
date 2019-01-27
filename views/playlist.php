@@ -12,10 +12,28 @@
           <input name="edit" value="Edit" type="submit">
         </form>
         <form method="post" action="/like/<?php echo $playlist[0]["playlistId"]; ?>">
-          <input name="like" value="Like" type="submit" class="<?php if (isset($playlist["userLikes"])) {echo "disabled";} ?>">
+          <input name="like" value="<?php
+            if (isset($playlist[0]["userLikes"])) {
+              echo "Liked";
+            } else {
+              echo "Like";
+            }
+          ?>" type="submit" class="<?php if (isset($playlist[0]["userLikes"])) {echo "disabled";} ?>">
+          <input type="hidden" name="redirect" value="playlist">
+          <input type="hidden" name="pattern-key" value="id">
+          <input type="hidden" name="pattern-value" value="<?php echo $playlist[0]["playlistId"]; ?>">
         </form>
         <form method="post" action="/save/<?php echo $playlist[0]["playlistId"]; ?>">
-          <input name="save" value="Save" type="submit">
+          <input name="save" value="<?php
+            if (isset($playlist[0]["userSaves"])) {
+              echo "Saved";
+            } else {
+              echo "Save";
+            }
+          ?>" type="submit" class="<?php if (isset($playlist[0]["userSaves"])) {echo "disabled";} ?>">
+          <input type="hidden" name="redirect" value="playlist">
+          <input type="hidden" name="pattern-key" value="id">
+          <input type="hidden" name="pattern-value" value="<?php echo $playlist[0]["playlistId"]; ?>">
         </form>
         <?php
       }

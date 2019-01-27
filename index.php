@@ -14,13 +14,13 @@
 
   $c['logger'] = function($c) {
     $logger = new \Monolog\Logger('my_logger');
-    $file_handler = new \Monolog\Handler\StreamHandler('../logs/app.log');
+    $file_handler = new \Monolog\Handler\StreamHandler(__DIR__.'/../logs/app.log');
     $logger->pushHandler($file_handler);
     return $logger;
   };
 
   $c['view'] = function ($container) {
-    $view = new \Slim\Views\PhpRenderer('./views/');
+    $view = new \Slim\Views\PhpRenderer(__DIR__.'/views');
     $view->parserOptions = array(
       'debug' => true
     );
@@ -65,7 +65,8 @@
           name,
           description,
           username,
-          userLikes.userId AS userLikes
+          userLikes.userId AS userLikes,
+          userSaves.userId AS userSaves
         FROM playlists
         LEFT OUTER JOIN likes
           ON likes.playlistId = playlists.playlistId
@@ -76,12 +77,18 @@
           WHERE userId = ?
         ) AS userLikes
           ON userLikes.playlistId = playlists.playlistId
+        LEFT OUTER JOIN (
+          SELECT * FROM saves
+          WHERE userId = ?
+        ) AS userSaves
+          ON playlists.playlistId = userSaves.playlistId
         WHERE privacy = 'public'
         GROUP BY playlistId
         ORDER BY nol DESC, RAND()
         LIMIT 10;
       ");
       $result->bindParam(1, $userId, PDO::PARAM_INT);
+      $result->bindParam(2, $userId, PDO::PARAM_INT);
       $result->execute();
     }
     $playlists = $result->fetchAll(PDO::FETCH_ASSOC);
@@ -257,6 +264,8 @@
     try {
       $result = $db->query("SELECT email, username FROM users");
       $userList = $result->fetchAll(PDO::FETCH_ASSOC);
+      $emailList = array();
+      $usernameList = array();
       foreach ($userList as $user) {
         $emailList[] = $user['email'];
         $usernameList[] = strtolower($user['username']);
@@ -288,6 +297,7 @@
       $added = $result->execute();
       $result = $db->prepare("SELECT userId FROM users WHERE email = ?;");
       $result->bindParam(1, $cleanEmail, PDO::PARAM_STR);
+      $result->execute();
       $userId = $result->fetch()["userId"];
     } catch (Exception $e) {
       echo "Query failed: " . $e->getMessage();
@@ -403,6 +413,7 @@
     $pattern = [];
     // do basic checks for required fields and login checks
     include __DIR__."/inc/submit-playlist-checks.php";
+
     // open connection to database
     include __DIR__."/inc/connection.php";
 
@@ -635,6 +646,7 @@
     }
     $privacy = $data["privacy"];
     $playlistUserId = $data["userId"];
+    $userId = getUserId();
     if ($privacy == "private") {
       if (!isAuthenticated()) {
         $redirect = "playlist";
@@ -642,7 +654,6 @@
         $res = $this->view->render($res, '/login.php', ['forced' => true, 'redirect' => $redirect, 'pattern_key' => $pattern_key, 'pattern_value' => $playlistId]);
         return $res;
       }
-      $userId = getUserId();
       if ($userId === false) {
         return $res->withStatus(302)
                    ->withHeader('Location', $app->getContainer()->get('router')->pathFor('playlist',["id" => $playlistId]));
@@ -653,15 +664,53 @@
       }
     }
     include __DIR__."/inc/connection.php";
-    $result = $db->prepare("
-      SELECT username, name, description, privacy, trackName, artistName, spotifyLink, playlists.playlistId FROM playlists
-      INNER JOIN users ON playlists.userId = users.userId
-      INNER JOIN playlistsTracks ON playlists.playlistId = playlistsTracks.playlistId
-      INNER JOIN tracks ON playlistsTracks.trackId = tracks.trackId
-      WHERE playlists.playlistId = ?;
-    ");
-    $result->bindParam(1, $playlistId, PDO::PARAM_INT);
-    $result->execute();
+    if ($userId === false) {
+      $result = $db->prepare("
+        SELECT username, name, description, privacy, trackName, artistName, spotifyLink, playlists.playlistId FROM playlists
+        INNER JOIN users ON playlists.userId = users.userId
+        INNER JOIN playlistsTracks ON playlists.playlistId = playlistsTracks.playlistId
+        INNER JOIN tracks ON playlistsTracks.trackId = tracks.trackId
+        WHERE playlists.playlistId = ?;
+      ");
+      $result->bindParam(1, $playlistId, PDO::PARAM_INT);
+      $result->execute();
+    } else {
+      $result = $db->prepare("
+        SELECT
+          username,
+          name,
+          description,
+          privacy,
+          trackName,
+          artistName,
+          spotifyLink,
+          playlists.playlistId,
+          userLikes.userId AS userLikes,
+          userSaves.userId AS userSaves
+        FROM playlists
+        INNER JOIN users
+          ON playlists.userId = users.userId
+        INNER JOIN playlistsTracks
+          ON playlists.playlistId = playlistsTracks.playlistId
+        INNER JOIN tracks
+          ON playlistsTracks.trackId = tracks.trackId
+        LEFT OUTER JOIN (
+          SELECT * FROM likes
+          WHERE userId = ?
+        ) AS userLikes
+          ON playlists.playlistId = userLikes.playlistId
+        LEFT OUTER JOIN (
+          SELECT * FROM saves
+          WHERE userId = ?
+        ) AS userSaves
+          ON playlists.playlistId = userSaves.playlistId
+        WHERE playlists.playlistId = ?;
+      ");
+      $result->bindParam(1, $userId, PDO::PARAM_INT);
+      $result->bindParam(2, $userId, PDO::PARAM_INT);
+      $result->bindParam(3, $playlistId, PDO::PARAM_INT);
+      $result->execute();
+    }
     $playlist = $result->fetchAll(PDO::FETCH_ASSOC);
     $res = $this->view->render($res, '/playlist.php', ["playlist" => $playlist]);
     return $res;
@@ -910,6 +959,140 @@
     }
     return $res->withStatus(302)
                ->withHeader('Location', $app->getContainer()->get('router')->pathFor($redirect, $pattern));
+  });
+
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+  // POST route for saving playlists  //
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+  $app->post('/save/{id}', function(Request $req, Response $res, $args) use ($app) {
+    // get posted data
+    $playlistId = filter_var($args["id"], FILTER_SANITIZE_STRING);
+    $redirect = $req->getParsedBody()['redirect'];
+    $patternKey = $req->getParsedBody()['pattern-key'];
+    $patternValue = $req->getParsedBody()['pattern-value'];
+    // filter inputs
+    $cleanRedirect = filter_var($redirect, FILTER_SANITIZE_STRING);
+    $cleanPatternKey = filter_var($patternKey, FILTER_SANITIZE_STRING);
+    $cleanPatterValue = filter_var($patternValue, FILTER_SANITIZE_STRING);
+    // create redirect pattern
+    $pattern = [$cleanPatternKey => $cleanPatterValue];
+    $userId = getUserId();
+    if ($userId === false) {
+      $redirect = "playlist";
+      $pattern_key = "id";
+      $res = $this->view->render($res, '/login.php', ['forced' => true, 'redirect' => $redirect, 'pattern_key' => $pattern_key, 'pattern_value' => $playlistId]);
+      return $res;
+    }
+    include __DIR__."/inc/connection.php";
+    try {
+      $result = $db->prepare("SELECT * FROM saves WHERE userId = ? && playlistId = ?;");
+      $result->bindParam(1, $userId, PDO::PARAM_INT);
+      $result->bindParam(2, $playlistId, PDO::PARAM_INT);
+      $result->execute();
+      $liked = $result->fetch(PDO::FETCH_ASSOC);
+      if (!empty($liked)) {
+        $result = $db->prepare("DELETE FROM saves WHERE userId = ? && playlistId = ?;");
+        $result->bindParam(1, $userId, PDO::PARAM_INT);
+        $result->bindParam(2, $playlistId, PDO::PARAM_INT);
+        $result->execute();
+      } else {
+        $result = $db->prepare("INSERT INTO saves (userId, playlistId) VALUES (?, ?);");
+        $result->bindParam(1, $userId, PDO::PARAM_INT);
+        $result->bindParam(2, $playlistId, PDO::PARAM_INT);
+        $result->execute();
+      }
+    } catch (Exception $e) {
+      echo "bad request".$e->getMessage();
+      die("died");
+    }
+    return $res->withStatus(302)
+               ->withHeader('Location', $app->getContainer()->get('router')->pathFor($redirect, $pattern));
+  });
+
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+  // GET route for searching playlists  //
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+  $app->get('/search', function(Request $req, Response $res, $args) use ($app) {
+    $search = $req->getQueryParams()["search"];
+    $cleanSearch = filter_var($search, FILTER_SANITIZE_STRING);
+    var_dump($cleanSearch);
+  });
+
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+  // POST route for adding song to a playlist using AJAX //
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
+  $app->post("/add-track", function (Request $req, Response $res) use ($app) {
+    // get title, description, and confirmed tracks from posted
+    $tracks = array();
+    if (isset($req->getParsedBody()['tracks'])) {
+      $tracks = $req->getParsedBody()['tracks'];
+    }
+
+    // if playlist is 50 tracks or longer redirect with message
+    if (sizeof($tracks) >= 50) {
+      return "Maximum playlist length reached";
+    }
+    // if spotify URI is submitted
+    if (isset($req->getParsedBody()['spotify'])) {
+      // get spotify URI from post
+      $URI = $req->getParsedBody()['spotify'];
+      // filter URI
+      $cleanURI = filter_var($URI, FILTER_SANITIZE_STRING);
+
+      // if URI is empty redirect back to new playlist with message
+      if (empty($cleanURI)) {
+        return "Please enter a valid URI";
+      }
+
+      $explodedURI = explode(":",$cleanURI);
+      // if URI is not a track redirect with message
+      if ($explodedURI[1] != "track") {
+        return "Please enter a valid URI of a single song";
+      }
+
+      // get track info from spotify api
+      $spotifyId = $explodedURI[2];
+      $track = getTrack($spotifyId, $this->logger);
+
+      // if no track is returned redirect with message
+      if (empty($track)) {
+        return "Could not get track from spotify. Please enter a valid URI of a single song";
+      }
+
+      // get song title, artist and link from data
+      $trackName = $track->name;
+      foreach ($track->artists as $artist) {
+        $artistList[] = $artist->name;
+      }
+      $artistName = implode(' & ', $artistList);
+      $spotifyLink = $track->external_urls->spotify;
+    }
+    // if track is submitted manually
+    if (isset($req->getParsedBody()['track-name'])) {
+      // get track and artist from post
+      $trackName = $req->getParsedBody()['track-name'];
+      $artistName = $req->getParsedBody()['artist-name'];
+      // filter input
+      $cleanTrackName = filter_var($trackName, FILTER_SANITIZE_STRING);
+      $cleanArtistName = filter_var($artistName, FILTER_SANITIZE_STRING);
+
+      if (empty($cleanArtistName) || empty($cleanTrackName)) {
+        return "Please enter a song title and artist";
+      }
+      $trackName = $cleanTrackName;
+      $artistName = $cleanArtistName;
+      $spotifyLink = '';
+    }
+
+    // write new track into playlist array
+    $cleanTrack = [
+      "title"=>$trackName,
+      "artist"=>$artistName,
+      "link"=>$spotifyLink
+    ];
+
+    // redirect back to create playlist page
+    return $cleanTrack;
   });
 
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
