@@ -2,7 +2,8 @@
 
 function getToken() {
   $url = "https://accounts.spotify.com/api/token";
-  $header = "Authorization: Basic ".getenv("SPOTIFY_SECRET");
+  $header = "Content-Type: application/x-www-form-urlencoded\n".
+            "Authorization: Basic ".getenv("SPOTIFY_SECRET");
   $body = ['grant_type'=>'client_credentials'];
 
   $postdata = http_build_query($body);

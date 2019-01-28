@@ -72,17 +72,19 @@ include __DIR__.'/../inc/header.php';
                 </td>
               </tr>
             <?php } ?>
+          </tbody>
+          <tfoot>
             <tr>
               <td id="new-track">
                 <?php
                 if (isset($_COOKIE['form'])) {
                   if ($_COOKIE['form'] == "spotify") {
                     ?>
-                    <span id="inputs"><input type="submit" formaction="/add" name="add-track" value="+"><input name="spotify" type="text" placeholder="Spotify URI" class="spotify-input" value="<?php echo $URI; ?>"><button onclick="goBack()">X</button></span>
+                    <span id="inputs"><button onclick="getTrack(event)" id="add">+</button><input id="spotify" name="spotify" type="text" placeholder="Spotify URI" class="spotify-input" value="<?php echo $URI; ?>"><button onclick="goBack()">X</button></span>
                     <?php
                   } else if ($_COOKIE['form'] == "manual") {
                     ?>
-                    <span id="inputs"><input type="submit" formaction="/add" name="add-track" value="+"><input name="track-name" type="text" placeholder="Song Title" value="<?php echo $trackName; ?>"><input name="artist-name" type="text" placeholder="Artist" value="<?php echo $artistName; ?>"><button onclick="goBack()">X</button></span>
+                    <span id="inputs"><button onclick="getTrack(event)" id="add">+</button><input id="track-name" name="track-name" type="text" placeholder="Song Title" value="<?php echo $trackName; ?>"><input id="artist-name" name="artist-name" type="text" placeholder="Artist" value="<?php echo $artistName; ?>"><button onclick="goBack()">X</button></span>
                     <?php
                   }
                 } else {
@@ -97,7 +99,7 @@ include __DIR__.'/../inc/header.php';
                 ?>
               </td>
             </tr>
-          </tbody>
+          </tfoot>
         </table>
         <input type="submit" value="Save Playlist" name="finish"/>
         <input type="hidden" name="redirect" value="<?php echo $redirect; ?>">
@@ -110,6 +112,7 @@ include __DIR__.'/../inc/header.php';
   let newTrack = document.getElementById('new-track');
   let spotify = document.getElementById('spotify');
   let playlistLength = 0;
+  let newId = 1;
 
   let showSpotifyInput = () => {
     remove(newTrack, 'buttons');
@@ -160,16 +163,17 @@ include __DIR__.'/../inc/header.php';
   }
 
   let makeConfirmButton = () => {
-    let confirmButton = document.createElement('input');
-    confirmButton.setAttribute('type',"submit");
+    let confirmButton = document.createElement('button');
     confirmButton.setAttribute('name',"add-track");
-    confirmButton.setAttribute("formaction", "/add")
+    confirmButton.setAttribute('onclick',"getTrack(event)");
     confirmButton.setAttribute('value',"+");
+    confirmButton.innerHTML = "+";
     return confirmButton;
   }
 
   let makeInput = (name, placeholder) => {
     let input = document.createElement('input');
+    input.setAttribute("id",name);
     input.setAttribute("name",name);
     input.setAttribute("type","text");
     input.setAttribute("placeholder",placeholder);
@@ -193,8 +197,92 @@ include __DIR__.'/../inc/header.php';
     remove(trackList, id);
   }
 
-  let getTrack = () => {
-    
+  let httpRequest;
+
+  let getTrack = (e) => {
+    e.preventDefault();
+    let tracks = [];
+    let spotify;
+    let trackName;
+    let artistName;
+    let method;
+    for (let input of e.path[6]) {
+      if (input.name == "tracks[]") {
+        tracks.push(input.value);
+      }
+      if (input.name == "spotify") {
+        spotify = input.value;
+        method = "spotify";
+      }
+      if (input.name == "track-name") {
+        trackName = input.value;
+        method = "manual";
+      }
+      if (input.name == "artist-name") {
+        artistName = input.value;
+        method = "manual";
+      }
+    }
+    tracks=JSON.stringify(tracks);
+    tracks = tracks.replace(/&/g, "%26");
+    httpRequest = new XMLHttpRequest;
+    if (!httpRequest) {
+      alert("no instance found");
+    }
+    httpRequest.onreadystatechange = alertContents;
+    httpRequest.open("POST", "http://netdev.firefly.co.uk/add-track");
+    httpRequest.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    httpRequest.send("method="+method+"&spotify="+spotify+"&tracks="+tracks+"&track-name="+trackName+"&artist-name="+artistName);
   }
 
+  let alertContents = () => {
+    if (httpRequest.readyState === XMLHttpRequest.DONE) {
+      if (httpRequest.status === 200) {
+        request = JSON.parse(httpRequest.responseText);
+        if (request.error) {
+          alert(request.error);
+        }
+        if (request.artist) {
+          let title = request.title;
+          let artist = request.artist;
+          let link = request.link;
+          let uri = document.getElementById("spotify");
+          let trackName = document.getElementById("track-name");
+          let artistName = document.getElementById("artist-name");
+          if (uri) {
+            console.log("hi")
+            uri.value = '';
+          }
+          if (trackName) {
+            trackName.value = "";
+            artistName.value = "";
+          }
+          let playlist = document.getElementById("track-list");
+          let tr = document.createElement('tr');
+          tr.setAttribute("id", newId);
+          let td = document.createElement('td');
+          td.setAttribute("id", "track");
+          let input = document.createElement('input');
+          input.setAttribute("type", "hidden");
+          input.setAttribute("value", [title, artist, link].join("~#~"));
+          input.setAttribute("name", "tracks[]");
+          let button = document.createElement('button');
+          button.setAttribute("id","button");
+          button.setAttribute("onclick", `deleteTrack(${newId})`)
+          button.innerHTML = "X";
+          let label = document.createElement('label');
+          label.setAttribute("for", "tracks[]");
+          label.innerHTML = `${title} by ${artist}`;
+          newId ++
+          td.appendChild(input);
+          td.appendChild(label);
+          td.appendChild(button);
+          tr.appendChild(td);
+          playlist.appendChild(tr);
+        }
+      } else {
+        alert('There was a problem with the request.');
+      }
+    }
+  }
 </script>

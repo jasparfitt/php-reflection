@@ -110,6 +110,7 @@ td {
 .playlists {
   border: solid gray 1px;
   border-radius: 10px;
+  margin-bottom: 4rem;
 }
 
 .playlist-header {

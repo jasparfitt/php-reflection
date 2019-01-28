@@ -38,7 +38,7 @@ include __DIR__.'/../inc/header.php';
         echo "
         <li class='playlist-item'>
           <p class='placeholder'>
-            You haven't made any playlists yet
+            You don't have any playlists to show
           </p>
         </li>
         ";
@@ -76,20 +76,21 @@ include __DIR__.'/../inc/header.php';
     </ul>
 
     <h2>Saved Playlists</h2>
-    <ul class="saved-playlists playlists">
+    <ul class="saved-playlists playlists" id="saved-playlists">
       <?php
       if (empty($savedPlaylists)) {
         echo "
         <li>
           <p class='placeholder'>
-            You haven't saved any playlists yet
+            You haven't got any saved playlists
+
           </p>
         </li>
         ";
       } else {
         foreach ($savedPlaylists as $playlist) {
           ?>
-          <li class="playlist-item">
+          <li class="playlist-item" id="<?php echo $playlist["playlistId"]; ?>">
             <div class="playlist-info">
               <div class="playlist-header">
                 <a href="/playlist/<?php echo $playlist["playlistId"]; ?>"><h3 class="playlist-title"><?php echo $playlist["name"]; ?></h3></a>
@@ -101,28 +102,18 @@ include __DIR__.'/../inc/header.php';
               </div>
             </div>
             <div class="playlist-control">
-              <form method="post" action="/like/<?php echo $playlist["playlistId"]; ?>">
-                <button name="delete" class="<?php if (isset($playlist["userLikes"])) {echo "disabled";} ?>">
-                  <?php
-                    if (isset($playlist["userLikes"])) {
-                      echo "Liked";
-                    } else {
-                      echo "Like";
-                    }
-                  ?>
-                </button>
-                <input type="hidden" name="redirect" value="undefined-personal-page">
-                <input type="hidden" name="pattern-key" value="">
-                <input type="hidden" name="pattern-value" value="">
-              </form>
-              <form method="post" action="/save/<?php echo $playlist["playlistId"]; ?>">
-                <button name="edit" class="<?php if (isset($playlist["userSaves"])) {echo "disabled";} ?>">
-                  X
-                </button>
-                <input type="hidden" name="redirect" value="undefined-personal-page">
-                <input type="hidden" name="pattern-key" value="">
-                <input type="hidden" name="pattern-value" value="">
-              </form>
+              <button id="like<?php echo $playlist["playlistId"] ?>" onclick="onLike(event, <?php echo $playlist["playlistId"] ?>)" name="like" class="<?php if (isset($playlist["userLikes"])) {echo "disabled";} ?>">
+                <?php
+                  if (isset($playlist["userLikes"])) {
+                    echo "Liked";
+                  } else {
+                    echo "Like";
+                  }
+                ?>
+              </button>
+              <button id="save<?php echo $playlist["playlistId"] ?>" onclick="onSave(event, <?php echo $playlist["playlistId"] ?>)" name="save" class="<?php if (isset($playlist["userSaves"])) {echo "disabled";} ?>">
+                X
+              </button>
             </div>
           </li>
           <?php
@@ -130,6 +121,10 @@ include __DIR__.'/../inc/header.php';
       }
       ?>
     </ul>
-
   </div>
 </main>
+<script> let remove = true;</script>
+<?php
+  include __DIR__."/../inc/save-code.php";
+  include __DIR__."/../inc/like-code.php";
+?>

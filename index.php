@@ -100,6 +100,17 @@
   // GET route for login page //
   // ~~~~~~~~~~~~~~~~~~~~~~~~ //
   $app->get('/login', function (Request $req, Response $res) {
+    if (isset($_COOKIE['redirect'])) {
+      $forced = true;
+      $redirect = filter_var($_COOKIE['redirect'], FILTER_SANITIZE_STRING);
+      $patternKey = filter_var($_COOKIE['patternKey'], FILTER_SANITIZE_STRING);
+      $patternValue = filter_var($_COOKIE['patternValue'], FILTER_SANITIZE_STRING);
+      destroyCookie("redirect");
+      destroyCookie("patternKey");
+      destroyCookie("patternValue");
+      $res = $this->view->render($res, '/login.php', ["forced"=>$forced, "redirect"=>$redirect, "pattern_key"=>$patternKey, "pattern_value"=>$patternValue]);
+      return $res;
+    }
     $res = $this->view->render($res, '/login.php');
     return $res;
   })->setName('login');
@@ -478,161 +489,161 @@
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
   // POST route for adding song to a playlist //
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
-  $app->post("/add", function (Request $req, Response $res) use ($app) {
-    // get title, description, and confirmed tracks from posted
-    $title = $req->getParsedBody()['title'];
-    $description = $req->getParsedBody()['description'];
-    $tracks = array();
-    if (isset($req->getParsedBody()['tracks'])) {
-      $tracks = $req->getParsedBody()['tracks'];
-    }
-    $privacy = $req->getParsedBody()['privacy'];
-    $redirect = $req->getParsedBody()['redirect'];
-    $patternKey = $req->getParsedBody()['pattern-key'];
-    $patternValue = $req->getParsedBody()['pattern-value'];
-    // filter inputs
-    $cleanTitle = filter_var($title, FILTER_SANITIZE_STRING);
-    $cleanDesc = filter_var($description, FILTER_SANITIZE_STRING);
-    $cleanPrivacy = filter_var($privacy, FILTER_SANITIZE_STRING);
-    $cleanRedirect = filter_var($redirect, FILTER_SANITIZE_STRING);
-    $cleanPatternKey = filter_var($patternKey, FILTER_SANITIZE_STRING);
-    $cleanPatterValue = filter_var($patternValue, FILTER_SANITIZE_STRING);
-    // set up redirect parameters
-    $errorRedirect = $successRedirect = $cleanRedirect;
-    $pattern = [$cleanPatternKey => $cleanPatterValue];
-    $cleanTracks = array();
-    foreach ($tracks as $track) {
-      $cleanTrack=explode("~#~", filter_var($track, FILTER_SANITIZE_STRING));
-      if (sizeof($cleanTrack) == 2) {
-        $cleanTracks[] =[
-          "title"=>$cleanTrack[0],
-          "artist"=>$cleanTrack[1],
-          "link"=>''
-        ];
-      } else if (sizeof($cleanTrack) > 2) {
-        $cleanTracks[] =[
-          "title"=>$cleanTrack[0],
-          "artist"=>$cleanTrack[1],
-          "link"=>$cleanTrack[2]
-        ];
-      }
-    }
-    // save playlist to cookie incase of redirect
-    $playlist = [
-      "title"=>$cleanTitle,
-      "description"=>$cleanDesc,
-      "tracks"=>$cleanTracks,
-      "privacy"=>$cleanPrivacy
-    ];
-
-    session_name('playlist');
-    session_id("playlist");
-    session_set_cookie_params(3600,'/',getenv("COOKIE_DOMAIN"));
-    session_start();
-    $_SESSION['playlist'] = $playlist;
-    session_write_close();
-
-    // if playlist is 50 tracks or longer redirect with message
-    if (sizeof($cleanTracks) >= 50) {
-      return $res->withStatus(302)
-                 ->withHeader('Location', $app->getContainer()->get('router')->pathFor($redirect, $pattern))
-                 ->withHeader('Set-Cookie', "msg=Maximum playlist length reached; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
-    }
-    // if spotify URI is submitted
-    if (isset($req->getParsedBody()['spotify'])) {
-      // get spotify URI from post
-      $URI = $req->getParsedBody()['spotify'];
-      // filter URI
-      $cleanURI = filter_var($URI, FILTER_SANITIZE_STRING);
-      // save cookie incase of redirect
-      setcookie("form", "spotify", time() + 3600, '/', getenv("COOKIE_DOMAIN"));
-      setcookie("URI", $cleanURI, time() + 3600, '/', getenv("COOKIE_DOMAIN"));
-
-      // if URI is empty redirect back to new playlist with message
-      if (empty($cleanURI)) {
-        return $res->withStatus(302)
-                   ->withHeader('Location', $app->getContainer()->get('router')->pathFor($redirect, $pattern))
-                   ->withHeader('Set-Cookie', "msg=Please enter a valid URI; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
-      }
-
-      $explodedURI = explode(":",$cleanURI);
-      // if URI is not a track redirect with message
-      if ($explodedURI[1] != "track") {
-        return $res->withStatus(302)
-                   ->withHeader('Location', $app->getContainer()->get('router')->pathFor($redirect, $pattern))
-                   ->withHeader('Set-Cookie', "msg=Please enter a valid URI of a single song; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
-      }
-
-      // get track info from spotify api
-      $spotifyId = $explodedURI[2];
-      $track = getTrack($spotifyId, $this->logger);
-
-      // if no track is returned redirect with message
-      if (empty($track)) {
-        return $res->withStatus(302)
-                   ->withHeader('Location', $app->getContainer()->get('router')->pathFor($redirect, $pattern))
-                   ->withHeader('Set-Cookie', "msg=Could not get track from spotify. Please enter a valid URI of a single song; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
-      }
-
-      // get song title, artist and link from data
-      $trackName = $track->name;
-      foreach ($track->artists as $artist) {
-        $artistList[] = $artist->name;
-      }
-      $artistName = implode(' & ', $artistList);
-      $spotifyLink = $track->external_urls->spotify;
-    }
-    // if track is submitted manually
-    if (isset($req->getParsedBody()['track-name'])) {
-      // get track and artist from post
-      $trackName = $req->getParsedBody()['track-name'];
-      $artistName = $req->getParsedBody()['artist-name'];
-      // filter input
-      $cleanTrackName = filter_var($trackName, FILTER_SANITIZE_STRING);
-      $cleanArtistName = filter_var($artistName, FILTER_SANITIZE_STRING);
-      // save cookies incase of Redirects
-      setcookie("form", "manual", time() + 3600, '/', getenv("COOKIE_DOMAIN"));
-      setcookie("trackName", $cleanTrackName, time() + 3600, '/', getenv("COOKIE_DOMAIN"));
-      setcookie("artistName", $cleanArtistName, time() + 3600, '/', getenv("COOKIE_DOMAIN"));
-
-      if (empty($cleanArtistName) || empty($cleanTrackName)) {
-        return $res->withStatus(302)
-                   ->withHeader('Location', $app->getContainer()->get('router')->pathFor('create-playlist'))
-                   ->withHeader('Set-Cookie', "msg=Please enter a song title and artist; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
-      }
-      $trackName = $cleanTrackName;
-      $artistName = $cleanArtistName;
-      $spotifyLink = '';
-    }
-
-    // write new track into playlist array
-    $cleanTracks[] = [
-      "title"=>$trackName,
-      "artist"=>$artistName,
-      "link"=>$spotifyLink
-    ];
-    $playlist = [
-      "title"=>$cleanTitle,
-      "description"=>$cleanDesc,
-      "tracks"=>$cleanTracks,
-      "privacy"=>$cleanPrivacy
-    ];
-
-    // save playlist array to cookie
-    session_name('playlist');
-    session_id("playlist");
-    session_set_cookie_params(3600,'/',getenv("COOKIE_DOMAIN"));
-    session_start();
-    $_SESSION['playlist'] = $playlist;
-    session_write_close();
-    destroyCookie("URI");
-    destroyCookie("trackName");
-    destroyCookie("artistName");
-
-    // redirect back to create playlist page
-    return $res->withStatus(302)
-               ->withHeader('Location', $app->getContainer()->get('router')->pathFor($redirect, $pattern));
-  });
+  // $app->post("/add", function (Request $req, Response $res) use ($app) {
+  //   // get title, description, and confirmed tracks from posted
+  //   $title = $req->getParsedBody()['title'];
+  //   $description = $req->getParsedBody()['description'];
+  //   $tracks = array();
+  //   if (isset($req->getParsedBody()['tracks'])) {
+  //     $tracks = $req->getParsedBody()['tracks'];
+  //   }
+  //   $privacy = $req->getParsedBody()['privacy'];
+  //   $redirect = $req->getParsedBody()['redirect'];
+  //   $patternKey = $req->getParsedBody()['pattern-key'];
+  //   $patternValue = $req->getParsedBody()['pattern-value'];
+  //   // filter inputs
+  //   $cleanTitle = filter_var($title, FILTER_SANITIZE_STRING);
+  //   $cleanDesc = filter_var($description, FILTER_SANITIZE_STRING);
+  //   $cleanPrivacy = filter_var($privacy, FILTER_SANITIZE_STRING);
+  //   $cleanRedirect = filter_var($redirect, FILTER_SANITIZE_STRING);
+  //   $cleanPatternKey = filter_var($patternKey, FILTER_SANITIZE_STRING);
+  //   $cleanPatterValue = filter_var($patternValue, FILTER_SANITIZE_STRING);
+  //   // set up redirect parameters
+  //   $errorRedirect = $successRedirect = $cleanRedirect;
+  //   $pattern = [$cleanPatternKey => $cleanPatterValue];
+  //   $cleanTracks = array();
+  //   foreach ($tracks as $track) {
+  //     $cleanTrack=explode("~#~", filter_var($track, FILTER_SANITIZE_STRING));
+  //     if (sizeof($cleanTrack) == 2) {
+  //       $cleanTracks[] =[
+  //         "title"=>$cleanTrack[0],
+  //         "artist"=>$cleanTrack[1],
+  //         "link"=>''
+  //       ];
+  //     } else if (sizeof($cleanTrack) > 2) {
+  //       $cleanTracks[] =[
+  //         "title"=>$cleanTrack[0],
+  //         "artist"=>$cleanTrack[1],
+  //         "link"=>$cleanTrack[2]
+  //       ];
+  //     }
+  //   }
+  //   // save playlist to cookie incase of redirect
+  //   $playlist = [
+  //     "title"=>$cleanTitle,
+  //     "description"=>$cleanDesc,
+  //     "tracks"=>$cleanTracks,
+  //     "privacy"=>$cleanPrivacy
+  //   ];
+  //
+  //   session_name('playlist');
+  //   session_id("playlist");
+  //   session_set_cookie_params(3600,'/',getenv("COOKIE_DOMAIN"));
+  //   session_start();
+  //   $_SESSION['playlist'] = $playlist;
+  //   session_write_close();
+  //
+  //   // if playlist is 50 tracks or longer redirect with message
+  //   if (sizeof($cleanTracks) >= 50) {
+  //     return $res->withStatus(302)
+  //                ->withHeader('Location', $app->getContainer()->get('router')->pathFor($redirect, $pattern))
+  //                ->withHeader('Set-Cookie', "msg=Maximum playlist length reached; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
+  //   }
+  //   // if spotify URI is submitted
+  //   if (isset($req->getParsedBody()['spotify'])) {
+  //     // get spotify URI from post
+  //     $URI = $req->getParsedBody()['spotify'];
+  //     // filter URI
+  //     $cleanURI = filter_var($URI, FILTER_SANITIZE_STRING);
+  //     // save cookie incase of redirect
+  //     setcookie("form", "spotify", time() + 3600, '/', getenv("COOKIE_DOMAIN"));
+  //     setcookie("URI", $cleanURI, time() + 3600, '/', getenv("COOKIE_DOMAIN"));
+  //
+  //     // if URI is empty redirect back to new playlist with message
+  //     if (empty($cleanURI)) {
+  //       return $res->withStatus(302)
+  //                  ->withHeader('Location', $app->getContainer()->get('router')->pathFor($redirect, $pattern))
+  //                  ->withHeader('Set-Cookie', "msg=Please enter a valid URI; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
+  //     }
+  //
+  //     $explodedURI = explode(":",$cleanURI);
+  //     // if URI is not a track redirect with message
+  //     if ($explodedURI[1] != "track") {
+  //       return $res->withStatus(302)
+  //                  ->withHeader('Location', $app->getContainer()->get('router')->pathFor($redirect, $pattern))
+  //                  ->withHeader('Set-Cookie', "msg=Please enter a valid URI of a single song; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
+  //     }
+  //
+  //     // get track info from spotify api
+  //     $spotifyId = $explodedURI[2];
+  //     $track = getTrack($spotifyId, $this->logger);
+  //
+  //     // if no track is returned redirect with message
+  //     if (empty($track)) {
+  //       return $res->withStatus(302)
+  //                  ->withHeader('Location', $app->getContainer()->get('router')->pathFor($redirect, $pattern))
+  //                  ->withHeader('Set-Cookie', "msg=Could not get track from spotify. Please enter a valid URI of a single song; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
+  //     }
+  //
+  //     // get song title, artist and link from data
+  //     $trackName = $track->name;
+  //     foreach ($track->artists as $artist) {
+  //       $artistList[] = $artist->name;
+  //     }
+  //     $artistName = implode(' & ', $artistList);
+  //     $spotifyLink = $track->external_urls->spotify;
+  //   }
+  //   // if track is submitted manually
+  //   if (isset($req->getParsedBody()['track-name'])) {
+  //     // get track and artist from post
+  //     $trackName = $req->getParsedBody()['track-name'];
+  //     $artistName = $req->getParsedBody()['artist-name'];
+  //     // filter input
+  //     $cleanTrackName = filter_var($trackName, FILTER_SANITIZE_STRING);
+  //     $cleanArtistName = filter_var($artistName, FILTER_SANITIZE_STRING);
+  //     // save cookies incase of Redirects
+  //     setcookie("form", "manual", time() + 3600, '/', getenv("COOKIE_DOMAIN"));
+  //     setcookie("trackName", $cleanTrackName, time() + 3600, '/', getenv("COOKIE_DOMAIN"));
+  //     setcookie("artistName", $cleanArtistName, time() + 3600, '/', getenv("COOKIE_DOMAIN"));
+  //
+  //     if (empty($cleanArtistName) || empty($cleanTrackName)) {
+  //       return $res->withStatus(302)
+  //                  ->withHeader('Location', $app->getContainer()->get('router')->pathFor('create-playlist'))
+  //                  ->withHeader('Set-Cookie', "msg=Please enter a song title and artist; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
+  //     }
+  //     $trackName = $cleanTrackName;
+  //     $artistName = $cleanArtistName;
+  //     $spotifyLink = '';
+  //   }
+  //
+  //   // write new track into playlist array
+  //   $cleanTracks[] = [
+  //     "title"=>$trackName,
+  //     "artist"=>$artistName,
+  //     "link"=>$spotifyLink
+  //   ];
+  //   $playlist = [
+  //     "title"=>$cleanTitle,
+  //     "description"=>$cleanDesc,
+  //     "tracks"=>$cleanTracks,
+  //     "privacy"=>$cleanPrivacy
+  //   ];
+  //
+  //   // save playlist array to cookie
+  //   session_name('playlist');
+  //   session_id("playlist");
+  //   session_set_cookie_params(3600,'/',getenv("COOKIE_DOMAIN"));
+  //   session_start();
+  //   $_SESSION['playlist'] = $playlist;
+  //   session_write_close();
+  //   destroyCookie("URI");
+  //   destroyCookie("trackName");
+  //   destroyCookie("artistName");
+  //
+  //   // redirect back to create playlist page
+  //   return $res->withStatus(302)
+  //              ->withHeader('Location', $app->getContainer()->get('router')->pathFor($redirect, $pattern));
+  // });
 
   // ~~~~~~~~~~~~~~~~~~~~~~~~ //
   // GET route for playlists  //
@@ -919,21 +930,11 @@
   $app->post('/like/{id}', function(Request $req, Response $res, $args) use ($app) {
     // get posted data
     $playlistId = filter_var($args["id"], FILTER_SANITIZE_STRING);
-    $redirect = $req->getParsedBody()['redirect'];
-    $patternKey = $req->getParsedBody()['pattern-key'];
-    $patternValue = $req->getParsedBody()['pattern-value'];
-    // filter inputs
-    $cleanRedirect = filter_var($redirect, FILTER_SANITIZE_STRING);
-    $cleanPatternKey = filter_var($patternKey, FILTER_SANITIZE_STRING);
-    $cleanPatterValue = filter_var($patternValue, FILTER_SANITIZE_STRING);
     // create redirect pattern
-    $pattern = [$cleanPatternKey => $cleanPatterValue];
     $userId = getUserId();
     if ($userId === false) {
-      $redirect = "playlist";
-      $pattern_key = "id";
-      $res = $this->view->render($res, '/login.php', ['forced' => true, 'redirect' => $redirect, 'pattern_key' => $pattern_key, 'pattern_value' => $playlistId]);
-      return $res;
+      echo json_encode(["goTo"=>"login", "playlistId"=>$playlistId]);
+      die();
     }
     include __DIR__."/inc/connection.php";
     try {
@@ -957,8 +958,8 @@
       echo "bad request".$e->getMessage();
       die("died");
     }
-    return $res->withStatus(302)
-               ->withHeader('Location', $app->getContainer()->get('router')->pathFor($redirect, $pattern));
+    echo json_encode(["msg" =>"like successful"]);
+    die();
   });
 
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
@@ -967,21 +968,13 @@
   $app->post('/save/{id}', function(Request $req, Response $res, $args) use ($app) {
     // get posted data
     $playlistId = filter_var($args["id"], FILTER_SANITIZE_STRING);
-    $redirect = $req->getParsedBody()['redirect'];
-    $patternKey = $req->getParsedBody()['pattern-key'];
-    $patternValue = $req->getParsedBody()['pattern-value'];
-    // filter inputs
-    $cleanRedirect = filter_var($redirect, FILTER_SANITIZE_STRING);
-    $cleanPatternKey = filter_var($patternKey, FILTER_SANITIZE_STRING);
-    $cleanPatterValue = filter_var($patternValue, FILTER_SANITIZE_STRING);
-    // create redirect pattern
-    $pattern = [$cleanPatternKey => $cleanPatterValue];
+
     $userId = getUserId();
     if ($userId === false) {
       $redirect = "playlist";
       $pattern_key = "id";
-      $res = $this->view->render($res, '/login.php', ['forced' => true, 'redirect' => $redirect, 'pattern_key' => $pattern_key, 'pattern_value' => $playlistId]);
-      return $res;
+      echo json_encode(["goTo"=>"login", "playlistId"=>$playlistId]);
+      die();
     }
     include __DIR__."/inc/connection.php";
     try {
@@ -1005,8 +998,8 @@
       echo "bad request".$e->getMessage();
       die("died");
     }
-    return $res->withStatus(302)
-               ->withHeader('Location', $app->getContainer()->get('router')->pathFor($redirect, $pattern));
+    echo json_encode(["msg" =>"save successful"]);
+    die();
   });
 
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
@@ -1022,32 +1015,34 @@
   // POST route for adding song to a playlist using AJAX //
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
   $app->post("/add-track", function (Request $req, Response $res) use ($app) {
+
     // get title, description, and confirmed tracks from posted
     $tracks = array();
     if (isset($req->getParsedBody()['tracks'])) {
       $tracks = $req->getParsedBody()['tracks'];
+      $tracks = json_decode($tracks);
     }
-
     // if playlist is 50 tracks or longer redirect with message
     if (sizeof($tracks) >= 50) {
-      return "Maximum playlist length reached";
+      echo json_encode(["error" => "Maximum playlist length reached"]);
     }
     // if spotify URI is submitted
-    if (isset($req->getParsedBody()['spotify'])) {
+    if ($req->getParsedBody()['method'] == "spotify") {
       // get spotify URI from post
       $URI = $req->getParsedBody()['spotify'];
       // filter URI
       $cleanURI = filter_var($URI, FILTER_SANITIZE_STRING);
-
       // if URI is empty redirect back to new playlist with message
       if (empty($cleanURI)) {
-        return "Please enter a valid URI";
+        echo json_encode(["error" => "Please enter a valid URI"]);
+        die();
       }
 
       $explodedURI = explode(":",$cleanURI);
       // if URI is not a track redirect with message
-      if ($explodedURI[1] != "track") {
-        return "Please enter a valid URI of a single song";
+      if (!isset($explodedURI[1]) || $explodedURI[1] != "track") {
+        echo json_encode(["error" => "Please enter a valid URI of a single song"]);
+        die();
       }
 
       // get track info from spotify api
@@ -1056,7 +1051,8 @@
 
       // if no track is returned redirect with message
       if (empty($track)) {
-        return "Could not get track from spotify. Please enter a valid URI of a single song";
+        echo json_encode(["error" => "Could not get track from spotify. Please enter a valid URI of a single song"]);
+        die();
       }
 
       // get song title, artist and link from data
@@ -1068,7 +1064,7 @@
       $spotifyLink = $track->external_urls->spotify;
     }
     // if track is submitted manually
-    if (isset($req->getParsedBody()['track-name'])) {
+    if ($req->getParsedBody()['method'] == "manual") {
       // get track and artist from post
       $trackName = $req->getParsedBody()['track-name'];
       $artistName = $req->getParsedBody()['artist-name'];
@@ -1077,7 +1073,8 @@
       $cleanArtistName = filter_var($artistName, FILTER_SANITIZE_STRING);
 
       if (empty($cleanArtistName) || empty($cleanTrackName)) {
-        return "Please enter a song title and artist";
+        echo json_encode(["error" => "Please enter a song title and artist"]);
+        die();
       }
       $trackName = $cleanTrackName;
       $artistName = $cleanArtistName;
@@ -1092,7 +1089,8 @@
     ];
 
     // redirect back to create playlist page
-    return $cleanTrack;
+    echo json_encode($cleanTrack);
+    die();
   });
 
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~ //

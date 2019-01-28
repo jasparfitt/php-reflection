@@ -31,34 +31,24 @@
                 </div>
               </div>
               <div class="playlist-control">
-                <form method="post" action="/like/<?php echo $playlist["playlistId"] ?>">
-                  <button name="delete" class="<?php if (isset($playlist["userLikes"])) {echo "disabled";} ?>">
-                    <?php
-                      if (isset($playlist["userLikes"])) {
-                        echo "Liked";
-                      } else {
-                        echo "Like";
-                      }
-                    ?>
-                  </button>
-                  <input type="hidden" name="redirect" value="home">
-                  <input type="hidden" name="pattern-key" value="">
-                  <input type="hidden" name="pattern-value" value="">
-                </form>
-                <form method="post" action="/save/<?php echo $playlist["playlistId"] ?>">
-                  <button name="edit" class="<?php if (isset($playlist["userSaves"])) {echo "disabled";} ?>">
-                    <?php
-                      if (isset($playlist["userSaves"])) {
-                        echo "Saved";
-                      } else {
-                        echo "Save";
-                      }
-                    ?>
-                  </button>
-                  <input type="hidden" name="redirect" value="home">
-                  <input type="hidden" name="pattern-key" value="">
-                  <input type="hidden" name="pattern-value" value="">
-                </form>
+                <button id="like<?php echo $playlist["playlistId"] ?>" onclick="onLike(event, <?php echo $playlist["playlistId"] ?>)" name="like" class="<?php if (isset($playlist["userLikes"])) {echo "disabled";} ?>">
+                  <?php
+                    if (isset($playlist["userLikes"])) {
+                      echo "Liked";
+                    } else {
+                      echo "Like";
+                    }
+                  ?>
+                </button>
+                <button id="save<?php echo $playlist["playlistId"] ?>" onclick="onSave(event, <?php echo $playlist["playlistId"] ?>)" name="save" class="<?php if (isset($playlist["userSaves"])) {echo "disabled";} ?>">
+                  <?php
+                    if (isset($playlist["userSaves"])) {
+                      echo "Saved";
+                    } else {
+                      echo "Save";
+                    }
+                  ?>
+                </button>
               </div>
             </li>
             <?php
@@ -68,3 +58,8 @@
       </ul>
     </div>
   </main>
+  <script> let remove = false;</script>
+<?php
+  include __DIR__."/../inc/save-code.php";
+  include __DIR__."/../inc/like-code.php";
+?>

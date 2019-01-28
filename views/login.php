@@ -2,8 +2,8 @@
   if (!isset($forced)) {
     $forced = false;
     $redirect = 'home';
-    $patternKey = '';
-    $patternValue = '';
+    $pattern_key = '';
+    $pattern_value = '';
   }
   include __DIR__.'/../inc/header.php';
   ?>
