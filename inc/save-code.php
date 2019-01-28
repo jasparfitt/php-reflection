@@ -36,7 +36,6 @@
   let saveResponse = () => {
     if (saveRequest.readyState === XMLHttpRequest.DONE) {
       if (saveRequest.status === 200) {
-        console.log(saveRequest.responseText);
         response = JSON.parse(saveRequest.responseText)
         if (response.goTo == "login") {
           document.cookie = "redirect=playlist; domain=<?php echo getenv("COOKIE_DOMAIN");?>; path=/";

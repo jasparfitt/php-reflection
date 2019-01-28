@@ -3,7 +3,7 @@
   ?>
   <main>
     <div class="margin-box">
-      <h1>Popular Playlists</h1>
+      <h1><?php echo $title; ?></h1>
       <ul class="popular-playlists playlists">
         <?php
         if (empty($playlists)) {
@@ -22,7 +22,7 @@
                 <div class="playlist-header">
                   <a href="/playlist/<?php echo $playlist["playlistId"]; ?>"><h3 class="playlist-title"><?php echo $playlist["name"]; ?></h3></a>
                   <h3 class="playlist-author"> by <?php echo $playlist["username"] ?></h3>
-                  <span class="playlist-privacy">Likes: <?php echo $playlist["NoL"]; ?></span>
+                  <span id="NoL<?php echo $playlist["playlistId"] ?>" class="playlist-privacy">Likes: <?php echo $playlist["NoL"]; ?></span>
                 </div>
                 <div class="playlist-description">
                   <p>
@@ -56,6 +56,40 @@
         }
         ?>
       </ul>
+      <?php
+      if (isset($numPages)) {
+        $start = $pageNum - 2;
+        $end = $pageNum + 2;
+        if ($start < 1) {
+          $start = 1;
+        }
+        if ($end > $numPages) {
+          $end = $numPages;
+        }
+        $pages = range($start, $end);
+        if ($start != 1) {
+          array_unshift($pages, "...");
+          array_unshift($pages, 1);
+        }
+        if ($end != $numPages) {
+          $pages[] = "...";
+          $pages[] = $numPages;
+        }
+      ?>
+        <nav class="pagination">
+          <?php foreach ($pages as $page) { ?>
+            <li>
+              <?php
+              if ($page != "..." && $page != $pageNum) {
+                echo "<a href=/$page?search=$searchTerm>$page</a>";
+              } else {
+                echo $page;
+              }
+              ?>
+            </li>
+          <?php } ?>
+        </nav>
+      <?php } ?>
     </div>
   </main>
   <script> let remove = false;</script>

@@ -15,7 +15,7 @@
         </a>
       </li>
       <li class="nav-item">
-        <form method="get" action="search">
+        <form method="get" action="1">
           <input type="text" name="search" placeholder="search"/>
           <input type="submit" value="Go" />
         </form>

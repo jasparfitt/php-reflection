@@ -12,19 +12,29 @@
     likeRequest.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
     likeRequest.send();
     let likeButton = document.getElementById(`like${id}`);
+    let NoL = document.getElementById(`NoL${id}`);
+    let litNoL
+    if (NoL) {
+      litNoL = parseInt(NoL.innerHTML.substr(7));
+    }
     if (likeButton.getAttribute('class') == "disabled") {
       likeButton.innerHTML = "Like";
       likeButton.classList.remove("disabled");
+      if (NoL) {
+        NoL.innerHTML = `Likes: ${litNoL - 1}`;
+      }
     } else {
       likeButton.innerHTML = "Liked";
       likeButton.classList.add("disabled");
+      if (NoL) {
+        NoL.innerHTML = `Likes: ${litNoL + 1}`;
+      }
     }
   }
 
   let likeResponse = () => {
     if (likeRequest.readyState === XMLHttpRequest.DONE) {
       if (likeRequest.status === 200) {
-        console.log(likeRequest.responseText);
         response = JSON.parse(likeRequest.responseText)
         if (response.goTo == "login") {
           document.cookie = "redirect=playlist; domain=<?php echo getenv("COOKIE_DOMAIN");?>; path=/";
