@@ -422,9 +422,13 @@
   $app->post('/create-playlist', function(Request $req, Response $res) use ($app) {
     $redirect = "create-playlist";
     $pattern = [];
-    // do basic checks for required fields and login checks
-    include __DIR__."/inc/submit-playlist-checks.php";
 
+    // do basic checks for required fields and login checks
+    $error = require __DIR__."/inc/submit-playlist-checks.php";
+    var_dump($error);
+    if (!empty($error)) {
+      return $error;
+    }
     // open connection to database
     include __DIR__."/inc/connection.php";
 
@@ -597,7 +601,10 @@
     $redirect = "update";
     $pattern = ["id"=>$playlistId];
     // do basic checks for required fields and login checks
-    include __DIR__."/inc/submit-playlist-checks.php";
+    $error = require __DIR__."/inc/submit-playlist-checks.php";
+    if (!empty($error)) {
+      return $error;
+    }
     $playlistOwner = getPlaylistOwner($playlistId);
     // check playlist exists;
     if (empty($playlistOwner)) {
@@ -956,29 +963,85 @@
 
       $explodedURI = explode(":",$cleanURI);
       // if URI is not a track redirect with message
-      if (!isset($explodedURI[1]) || $explodedURI[1] != "track") {
+      if ((!isset($explodedURI[1]) || !isset($explodedURI[2]) || ($explodedURI[1] != "track" && $explodedURI[1] != 'artist' && $explodedURI[1] != 'album')) && (!isset($explodedURI[3]) || !isset($explodedURI[4]) || $explodedURI[3] != "playlist")) {
         echo json_encode(["error" => "Please enter a valid URI of a single song"]);
         die();
       }
+      if ($explodedURI[1] == "track") {
+        // get track info from spotify api
+        $spotifyId = $explodedURI[2];
+        $track = getTrack($spotifyId);
 
-      // get track info from spotify api
-      $spotifyId = $explodedURI[2];
-      $track = getTrack($spotifyId, $this->logger);
+        // if no track is returned redirect with message
+        if (empty($track)) {
+          echo json_encode(["error" => "Could not get track from spotify. Please enter a valid URI"]);
+          die();
+        }
 
-      // if no track is returned redirect with message
-      if (empty($track)) {
-        echo json_encode(["error" => "Could not get track from spotify. Please enter a valid URI of a single song"]);
-        die();
+        // get song title, artist and link from data
+        $trackName = $track->name;
+        foreach ($track->artists as $artist) {
+          $artistList[] = $artist->name;
+        }
+        $artistName = implode(' & ', $artistList);
+        $spotifyLink = $track->external_urls->spotify;
+
+        $cleanTrack = [
+          "title"=>$trackName,
+          "artist"=>$artistName,
+          "link"=>$spotifyLink
+        ];
+        $cleanTracks = [$cleanTrack];
+      } else if (($explodedURI[1] == "album") || ($explodedURI[1] == "artist") || (isset($explodedURI[3]) && $explodedURI[3] == "playlist")) {
+        $tracks = array();
+        if (isset($explodedURI[3]) && $explodedURI[3] == "playlist") {
+          // get track info from spotify api
+          $spotifyId = $explodedURI[4];
+          $tracks = getPlaylist($spotifyId);
+          $tracks = $tracks->items;
+        } else if ($explodedURI[1] == "album") {
+          // get track info from spotify api
+          $spotifyId = $explodedURI[2];
+          $tracks = getAlbum($spotifyId);
+          $tracks = $tracks->items;
+        } else if ($explodedURI[1] == "artist") {
+          // get track info from spotify api
+          $spotifyId = $explodedURI[2];
+          $tracks = getArtist($spotifyId);
+          $tracks = $tracks->tracks;
+        }
+        // if no track is returned redirect with message
+        if (empty($tracks)) {
+          echo json_encode(["error" => "Could not get track from spotify. Please enter a valid URI"]);
+          die();
+        }
+        // var_dump($playlistTracks);
+        foreach ($tracks as $trackItem) {
+          if (isset($trackItem->track)) {
+            $track = $trackItem->track;
+          } else {
+            $track = $trackItem;
+          }
+          $trackName = $track->name;
+          $artistList = array();
+          foreach ($track->artists as $artist) {
+            $artistList[] = $artist->name;
+          }
+          $artistName = implode(' & ', $artistList);
+          $spotifyLink = $track->external_urls->spotify;
+          $cleanTrack = [
+            "title"=>$trackName,
+            "artist"=>$artistName,
+            "link"=>$spotifyLink
+          ];
+          $cleanTracks[] = $cleanTrack;
+        }
+        // spotify:user:spotify:playlist:37i9dQZF1DXaVgr4Tx5kRF
+        // spotify:album:2okCg9scHue9GNELoB8U9g
+        // spotify:artist:2cGwlqi3k18jFpUyTrsR84
       }
-
-      // get song title, artist and link from data
-      $trackName = $track->name;
-      foreach ($track->artists as $artist) {
-        $artistList[] = $artist->name;
-      }
-      $artistName = implode(' & ', $artistList);
-      $spotifyLink = $track->external_urls->spotify;
     }
+
     // if track is submitted manually
     if ($req->getParsedBody()['method'] == "manual") {
       // get track and artist from post
@@ -995,17 +1058,21 @@
       $trackName = $cleanTrackName;
       $artistName = $cleanArtistName;
       $spotifyLink = '';
+      // write new track into playlist array
+      $cleanTrack = [
+        "title"=>$trackName,
+        "artist"=>$artistName,
+        "link"=>$spotifyLink
+      ];
+      $cleanTracks = [$cleanTrack];
     }
 
-    // write new track into playlist array
-    $cleanTrack = [
-      "title"=>$trackName,
-      "artist"=>$artistName,
-      "link"=>$spotifyLink
+    $data = [
+      "tracks"=>$cleanTracks,
+      "success"=>true
     ];
-
     // redirect back to create playlist page
-    echo json_encode($cleanTrack);
+    echo json_encode($data);
     die();
   });
 

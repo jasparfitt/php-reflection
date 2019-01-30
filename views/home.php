@@ -15,43 +15,11 @@
           </li>
           ";
         } else {
+          $playlist_control = true;
+          $playlist_privacy = null;
+          $playlist_edit = null;
           foreach ($playlists as $playlist) {
-            ?>
-            <li class="playlist-item">
-              <div class="playlist-info">
-                <div class="playlist-header">
-                  <a href="/playlist/<?php echo $playlist["playlistId"]; ?>"><h3 class="playlist-title"><?php echo $playlist["name"]; ?></h3></a>
-                  <h3 class="playlist-author"> by <?php echo $playlist["username"] ?></h3>
-                  <span id="NoL<?php echo $playlist["playlistId"] ?>" class="playlist-privacy">Likes: <?php echo $playlist["NoL"]; ?></span>
-                </div>
-                <div class="playlist-description">
-                  <p>
-                    <?php echo $playlist["description"]; ?>
-                  </p>
-                </div>
-              </div>
-              <div class="playlist-control">
-                <button id="like<?php echo $playlist["playlistId"] ?>" onclick="onLike(event, <?php echo $playlist["playlistId"] ?>)" name="like" class="<?php if (isset($playlist["userLikes"])) {echo "disabled";} ?>">
-                  <?php
-                    if (isset($playlist["userLikes"])) {
-                      echo "Liked";
-                    } else {
-                      echo "Like";
-                    }
-                  ?>
-                </button>
-                <button id="save<?php echo $playlist["playlistId"] ?>" onclick="onSave(event, <?php echo $playlist["playlistId"] ?>)" name="save" class="<?php if (isset($playlist["userSaves"])) {echo "disabled";} ?>">
-                  <?php
-                    if (isset($playlist["userSaves"])) {
-                      echo "Saved";
-                    } else {
-                      echo "Save";
-                    }
-                  ?>
-                </button>
-              </div>
-            </li>
-            <?php
+            include __DIR__."/../inc/playlist-item.php";
           }
         }
         ?>
@@ -68,24 +36,34 @@
         }
         $pages = range($start, $end);
         if ($start != 1) {
-          array_unshift($pages, "...");
-          array_unshift($pages, 1);
+          $pages["first-ellip"] = "...";
+          $pages["first-page"] = 1;
         }
         if ($end != $numPages) {
-          $pages[] = "...";
-          $pages[] = $numPages;
+          $pages["last-ellip"] = "...";
+          $pages["last-page"] = $numPages;
         }
       ?>
         <nav class="pagination">
-          <?php foreach ($pages as $page) { ?>
-            <li>
-              <?php
-              if ($page != "..." && $page != $pageNum) {
-                echo "<a href=/$page?search=$searchTerm>$page</a>";
-              } else {
-                echo $page;
-              }
-              ?>
+          <?php foreach ($pages as $key => $page) { ?>
+            <li
+              class="pages <?php
+                if (!is_int($key)) {
+                  echo $key;
+                } else {
+                  echo "page".($page-$pageNum);
+                }
+              ?>"
+            >
+              <span>
+                <?php
+                if ($page != "..." && $page != $pageNum) {
+                  echo "<a href=/$page?search=$searchTerm>$page</a>";
+                } else {
+                  echo $page;
+                }
+                ?>
+              </span>
             </li>
           <?php } ?>
         </nav>

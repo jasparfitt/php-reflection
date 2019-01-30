@@ -23,7 +23,7 @@
         savedPlaylists.appendChild(placeholderItem);
       }
     } else {
-      if (saveButton.getAttribute('class') == "disabled") {
+      if (saveButton.getAttribute('class').includes("disabled")) {
         saveButton.innerHTML = "Save";
         saveButton.classList.remove("disabled");
       } else {

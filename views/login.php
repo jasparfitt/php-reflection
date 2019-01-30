@@ -43,7 +43,7 @@
           <tr>
             <td></td>
             <td>
-              <input type="submit" name="login" value="Login" />
+              <input class="submit-btn" type="submit" name="login" value="Login" />
             </td>
           </tr>
         </table>

@@ -1,24 +1,30 @@
 <?php
 include __DIR__.'/../inc/connection.php';
 try {
-  $result = $db->prepare("SELECT name, description, privacy, playlistId FROM playlists WHERE userId = ?;");
+  $result = $db->prepare("
+    SELECT name, description, privacy, playlists.playlistId, COUNT(likes.userId) AS NoL FROM playlists
+    LEFT OUTER JOIN likes on likes.playlistId = playlists.playlistId
+    WHERE playlists.userId = ?
+    GROUP BY playlists.playlistId;");
   $result->bindParam(1, $userId, PDO::PARAM_STR);
   $result->execute();
   $userPlaylists = $result->fetchAll(PDO::FETCH_ASSOC);
   $result = $db->prepare("
-    SELECT name, description, saves.playlistId, username, userLikes.userId AS userLikes FROM saves
-    INNER JOIN playlists ON playlists.playlistId = saves.playlistId
-    INNER JOIN users ON saves.userId = users.userId
+    SELECT name, description, saves.playlistId, owners.username, userLikes.userId AS userLikes, COUNT(likes.userId) AS NoL FROM playlists
+    INNER JOIN (
+      SELECT * FROM saves WHERE userId = ?
+    ) AS saves ON playlists.playlistId = saves.playlistId
+    INNER JOIN users AS owners ON playlists.userId = owners.userId
+    LEFT OUTER JOIN likes ON likes.playlistId = playlists.playlistId
     LEFT OUTER JOIN (
       SELECT * FROM likes WHERE userId = ?
-    ) AS userLikes ON userLikes.playlistId = saves.playlistId
-    WHERE (saves.userId = ? && privacy = 'public' && playlists.userId != ?) || (saves.userId = ? && playlists.userId = ?);
+    ) AS userLikes ON userLikes.playlistId = playlists.playlistId
+    WHERE (privacy = 'public'  || playlists.userId = ?)
+    GROUP BY playlists.playlistId;
   ");
   $result->bindParam(1, $userId, PDO::PARAM_STR);
   $result->bindParam(2, $userId, PDO::PARAM_STR);
   $result->bindParam(3, $userId, PDO::PARAM_STR);
-  $result->bindParam(4, $userId, PDO::PARAM_STR);
-  $result->bindParam(5, $userId, PDO::PARAM_STR);
   $result->execute();
   $savedPlaylists = $result->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
@@ -32,7 +38,7 @@ include __DIR__.'/../inc/header.php';
   <div class="margin-box">
     <h1>Personal Page of <?php echo $username ?></h1>
     <h2>Your Playlists</h2>
-    <ul class="user-playlists playlists">
+    <ul id="user-playlists" class="user-playlists playlists">
       <?php
       if (empty($userPlaylists)) {
         echo "
@@ -43,30 +49,11 @@ include __DIR__.'/../inc/header.php';
         </li>
         ";
       } else {
+        $playlist_control = null;
+        $playlist_privacy = true;
+        $playlist_edit = true;
         foreach ($userPlaylists as $playlist) {
-          ?>
-          <li class="playlist-item">
-            <div class="playlist-info">
-              <div class="playlist-header">
-                <a href="/playlist/<?php echo $playlist["playlistId"]; ?>"><h3 class="playlist-title"><?php echo $playlist["name"]; ?></h3></a>
-                <span class="playlist-privacy"> <?php echo $playlist["privacy"]; ?></span>
-              </div>
-              <div class="playlist-description">
-                <p>
-                  <?php echo $playlist["description"]; ?>
-                </p>
-              </div>
-            </div>
-            <div class="playlist-control">
-              <form method="post" action="/delete/<?php echo $playlist["playlistId"]; ?>">
-                <button name="delete">Delete</button>
-              </form>
-              <form method="get" action="/edit/<?php echo $playlist["playlistId"]; ?>">
-                <button name="edit">Edit</button>
-              </form>
-            </div>
-          </li>
-          <?php
+          include __DIR__."/../inc/playlist-item.php";
         }
       }
       ?>
@@ -76,7 +63,7 @@ include __DIR__.'/../inc/header.php';
     </ul>
 
     <h2>Saved Playlists</h2>
-    <ul class="saved-playlists playlists" id="saved-playlists">
+    <ul id="saved-playlists" class="saved-playlists playlists" id="saved-playlists">
       <?php
       if (empty($savedPlaylists)) {
         echo "
@@ -88,35 +75,12 @@ include __DIR__.'/../inc/header.php';
         </li>
         ";
       } else {
+        $playlist_control = true;
+        $playlist_privacy = null;
+        $playlist_edit = null;
+        $remove = true;
         foreach ($savedPlaylists as $playlist) {
-          ?>
-          <li class="playlist-item" id="<?php echo $playlist["playlistId"]; ?>">
-            <div class="playlist-info">
-              <div class="playlist-header">
-                <a href="/playlist/<?php echo $playlist["playlistId"]; ?>"><h3 class="playlist-title"><?php echo $playlist["name"]; ?></h3></a>
-              </div>
-              <div class="playlist-description">
-                <p>
-                  <?php echo $playlist["description"]; ?>
-                </p>
-              </div>
-            </div>
-            <div class="playlist-control">
-              <button id="like<?php echo $playlist["playlistId"] ?>" onclick="onLike(event, <?php echo $playlist["playlistId"] ?>)" name="like" class="<?php if (isset($playlist["userLikes"])) {echo "disabled";} ?>">
-                <?php
-                  if (isset($playlist["userLikes"])) {
-                    echo "Liked";
-                  } else {
-                    echo "Like";
-                  }
-                ?>
-              </button>
-              <button id="save<?php echo $playlist["playlistId"] ?>" onclick="onSave(event, <?php echo $playlist["playlistId"] ?>)" name="save" class="<?php if (isset($playlist["userSaves"])) {echo "disabled";} ?>">
-                X
-              </button>
-            </div>
-          </li>
-          <?php
+          include __DIR__."/../inc/playlist-item.php";
         }
       }
       ?>

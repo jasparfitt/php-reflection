@@ -66,7 +66,7 @@
           </tr>
           <tr>
             <td colspan="2" class="submit">
-              <input type="submit" name="register" value="Register" />
+              <input class="submit-btn" type="submit" name="register" value="Register" />
             </td>
           </tr>
         </table>

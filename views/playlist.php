@@ -1,43 +1,41 @@
 <?php include __DIR__.'/../inc/header.php'; ?>
 <main>
-  <div class="margin-box">
-    <h1><?php echo $playlist[0]["name"]; ?></h1>
-    <?php
-      if ($playlist[0]["username"] == getUsername()) {
-        ?>
-        <form method="post" action="/delete/<?php echo $playlist[0]["playlistId"]; ?>">
-          <input name="delete" type="submit" value="Delete">
-        </form>
-        <form method="get" action="/edit/<?php echo $playlist[0]["playlistId"]; ?>">
-          <input name="edit" value="Edit" type="submit">
-        </form>
+  <div class="margin-box playlist-page">
+    <div class="playlist-top">
+      <div class="playlist-header">
+        <h1 class="playlist-title"><?php echo $playlist[0]["name"]; ?></h1>
+        <span class="playlist-author">by <?php echo $playlist[0]["username"]; ?>, <?php echo $playlist[0]["privacy"]; ?></span>
+      </div>
+      <div class="playlist-controls">
         <?php
-      }
-    ?>
-    <button id="like<?php echo $playlist["playlistId"] ?>" onclick="onLike(event, <?php echo $playlist["playlistId"] ?>)" name="like" class="<?php if (isset($playlist["userLikes"])) {echo "disabled";} ?>">
-      <?php
-        if (isset($playlist["userLikes"])) {
-          echo "Liked";
-        } else {
-          echo "Like";
-        }
-      ?>
-    </button>
-    <button id="save<?php echo $playlist["playlistId"] ?>" onclick="onSave(event, <?php echo $playlist["playlistId"] ?>)" name="save" class="<?php if (isset($playlist["userSaves"])) {echo "disabled";} ?>">
-      <?php
-        if (isset($playlist["userSaves"])) {
-          echo "Saved";
-        } else {
-          echo "Save";
-        }
-      ?>
-    </button>
-    <span>By <?php echo $playlist[0]["username"]; ?>,</span>
-    <span><?php echo $playlist[0]["privacy"]; ?></span>
-    <p>
-      <?php echo $playlist[0]["description"]; ?>
-    </p>
-    <table>
+        $tempPlaylist = $playlist;
+        $playlist = $tempPlaylist[0];
+          if ($playlist["username"] == getUsername()) {
+            include __DIR__."/../inc/edit-button.php";
+            include __DIR__."/../inc/delete-button.php";
+          }
+          include __DIR__."/../inc/save-button.php";
+          include __DIR__."/../inc/like-button.php";
+          $playlist = $tempPlaylist
+        ?>
+      </div>
+    </div>
+    <div class="playlist-description">
+      <p>
+        <?php echo $playlist[0]["description"]; ?>
+      </p>
+    </div>
+    <table class="playlist-tracks">
+      <thead>
+        <tr>
+          <th>
+            Title
+          </th>
+          <th>
+            Artist
+          </th>
+        </tr>
+      </thead>
       <tbody>
         <?php foreach ($playlist as $track ) { ?>
           <tr>

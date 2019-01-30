@@ -30,12 +30,32 @@ body {
   margin: 0;
 }
 
+button, input[type="submit"] {
+  border-style: unset;
+}
+
+button:hover, input[type="submit"]:hover {
+  cursor: pointer;
+}
+
 /**
  * Render the `main` element consistently in IE.
  */
 
 main {
   display: block;
+}
+
+a:visited {
+  color: unset;
+}
+
+a:active {
+  color: unset;
+}
+
+a {
+  color: unset;
 }
 
 /**

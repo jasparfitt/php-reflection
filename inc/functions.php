@@ -20,14 +20,12 @@ function getToken() {
   return $data;
 }
 
-function getTrack($track, $logger, $redirect = false) {
+function callApi($url, $redirect=false) {
   checkToken();
   try {
-    $url = "https://api.spotify.com/v1/tracks/$track";
     session_name("token");
     session_id("token");
     session_start();
-    $logger->addInfo($_SESSION["token"]->access_token);
     $header = "Content-Type: application/x-www-form-urlencoded\n".
               "Authorization: Bearer ".$_SESSION['token']->access_token;
     session_write_close();
@@ -59,12 +57,32 @@ function getTrack($track, $logger, $redirect = false) {
     }
     if (strpos($message, "401") !== false) {
       destroyCookie('token');
-      getTrack($track, $logger, true);
+      callApi($url, true);
     } else {
       echo $e->getMessage();
       die("died from exception");
     }
   }
+}
+
+function getTrack($id) {
+  $url = "https://api.spotify.com/v1/tracks/$id";
+  return callApi($url);
+}
+
+function getPlaylist($id) {
+  $url = "https://api.spotify.com/v1/playlists/$id/tracks";
+  return callApi($url);
+}
+
+function getArtist($id) {
+  $url = "https://api.spotify.com/v1/artists/$id/top-tracks?market=GB";
+  return callApi($url);
+}
+
+function getAlbum($id) {
+  $url = "https://api.spotify.com/v1/albums/$id/tracks";
+  return callApi($url);
 }
 
 function checkToken () {
@@ -74,7 +92,6 @@ function checkToken () {
     session_set_cookie_params(3400,'/',getenv("COOKIE_DOMAIN"));
     session_start();
     $_SESSION['token'] = getToken();
-    var_dump($_SESSION['token']);
     session_write_close();
   }
 }

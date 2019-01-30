@@ -55,12 +55,12 @@ include __DIR__.'/../inc/header.php';
             </tr>
             <tr>
               <td>
-                <input name="title" type="text" placeholder="Title" value="<?php echo $title; ?>"/>
+                <input class="title-input" name="title" type="text" placeholder="Title" value="<?php echo $title; ?>"/>
               </td>
             </tr>
             <tr>
               <td>
-                <textarea name='description' placeholder="Description"><?php echo $description; ?></textarea>
+                <textarea class="description-input" name='description' placeholder="Description"><?php echo $description; ?></textarea>
               </td>
             </tr>
             <?php foreach ($tracks as $key => $track) { ?>
@@ -68,7 +68,7 @@ include __DIR__.'/../inc/header.php';
                 <td id="track">
                   <input type="hidden" value="<?php echo implode("~#~", $track); ?>" name="tracks[]"/>
                   <label for "tracks[]"><?php echo $track["title"]." by ".$track["artist"] ?></label>
-                  <button id="button" onclick="deleteTrack('<?php echo $key; ?>')">X</button>
+                  <button class="delete-track" id="button" onclick="deleteTrack('<?php echo $key; ?>')"><i class="fas fa-times"></i></button>
                 </td>
               </tr>
             <?php } ?>
@@ -80,16 +80,37 @@ include __DIR__.'/../inc/header.php';
                 if (isset($_COOKIE['form'])) {
                   if ($_COOKIE['form'] == "spotify") {
                     ?>
-                    <span id="inputs"><button onclick="getTrack(event)" id="add">+</button><input id="spotify" name="spotify" type="text" placeholder="Spotify URI" class="spotify-input" value="<?php echo $URI; ?>"><button onclick="goBack()">X</button></span>
+                    <span id="inputs">
+                      <button onclick="getTrack(event)" id="add">
+                        <i class="fas fa-plus"></i>
+                      </button>
+                      <input id="spotify" name="spotify" type="text" placeholder="Spotify URI" class="spotify-input" value="<?php echo $URI; ?>">
+                      <button class="back-btn" onclick="goBack()">
+                        <i class="fas fa-times"></i>
+                      </button>
+                    </span>
                     <?php
                   } else if ($_COOKIE['form'] == "manual") {
                     ?>
-                    <span id="inputs"><button onclick="getTrack(event)" id="add">+</button><input id="track-name" name="track-name" type="text" placeholder="Song Title" value="<?php echo $trackName; ?>"><input id="artist-name" name="artist-name" type="text" placeholder="Artist" value="<?php echo $artistName; ?>"><button onclick="goBack()">X</button></span>
+                    <span id="inputs">
+                      <button onclick="getTrack(event)" id="add">
+                        <i class="fas fa-plus"></i>
+                      </button>
+                      <input id="track-name" name="track-name" type="text" placeholder="Song Title" value="<?php echo $trackName; ?>">
+                      <input id="artist-name" name="artist-name" type="text" placeholder="Artist" value="<?php echo $artistName; ?>">
+                      <button class="back-btn" onclick="goBack()">
+                        <i class="fas fa-times"></i>
+                      </button>
+                    </span>
                     <?php
                   }
                 } else {
                   ?>
-                  <span id="buttons">+ New track <button onclick="showSpotifyInput()" id="spotify">spotify URI</button> <button onclick="showManualInput()">Manually</button></span>
+                  <span id="buttons">
+                    <i class="fas fa-plus"></i> New track
+                    <button class="input-btn" onclick="showSpotifyInput()" id="spotify">spotify URI</button>
+                    <button class="input-btn" onclick="showManualInput()">Manually</button>
+                  </span>
                   <?php
                 }
                 destroyCookie("form");
@@ -101,7 +122,7 @@ include __DIR__.'/../inc/header.php';
             </tr>
           </tfoot>
         </table>
-        <input type="submit" value="Save Playlist" name="finish"/>
+        <input class="submit-btn" type="submit" onclick="overlay()" value="Save Playlist" name="finish"/>
         <input type="hidden" name="redirect" value="<?php echo $redirect; ?>">
         <input type="hidden" name="pattern-key" value="<?php echo $pattern_key; ?>">
         <input type="hidden" name="pattern-value" value="<?php echo $pattern_value; ?>">
@@ -114,11 +135,31 @@ include __DIR__.'/../inc/header.php';
   let playlistLength = 0;
   let newId = 1;
 
+  let overlay = () => {
+    let body = document.getElementById("body");
+    let overlay = document.createElement("div");
+    let message = "";
+    overlay.innerHTML = "<div class='overlay-info'>Saving Playlist </div><div></div>";
+    let dots = 0;
+    overlay.setAttribute("class","overlay");
+    body.appendChild(overlay);
+    window.setInterval(() => {
+      if (dots < 3) {
+        message += ".";
+        dots ++;
+      } else {
+        message = "";
+        dots = 0;
+      }
+      overlay.innerHTML = "<div class='overlay-info'>Saving Playlist </div><div class='overlay-left'>"+message+"</div>";
+    }, 1000)
+  }
+
   let showSpotifyInput = () => {
     remove(newTrack, 'buttons');
     let uriInput = makeInput('spotify',"Spotify URI");
     uriInput.setAttribute("class", "spotify-input");
-    let backButton =makeBackButton();
+    let backButton = makeBackButton();
     let inputHolder = makeHolder("inputs");
     let confirmButton = makeConfirmButton();
     inputHolder.appendChild(confirmButton);
@@ -157,8 +198,9 @@ include __DIR__.'/../inc/header.php';
 
   let makeBackButton = () => {
     let backButton = document.createElement('button');
-    backButton.innerHTML = "X";
+    backButton.innerHTML = "<i class='fas fa-times'></i>";
     backButton.setAttribute('onclick',"goBack()");
+    backButton.setAttribute('class',"back-btn");
     return backButton;
   }
 
@@ -166,8 +208,8 @@ include __DIR__.'/../inc/header.php';
     let confirmButton = document.createElement('button');
     confirmButton.setAttribute('name',"add-track");
     confirmButton.setAttribute('onclick',"getTrack(event)");
-    confirmButton.setAttribute('value',"+");
-    confirmButton.innerHTML = "+";
+    confirmButton.innerHTML = "<i class='fas fa-plus'></i>";
+    confirmButton.setAttribute('class',"confirm-btn");
     return confirmButton;
   }
 
@@ -188,7 +230,11 @@ include __DIR__.'/../inc/header.php';
   let goBack = () => {
     remove(newTrack, "inputs");
     let buttons = makeHolder("buttons");
-    buttons.innerHTML = "+ New track <button onclick='showSpotifyInput()' id='spotify'>spotify URI</button> <button onclick='showManualInput()'>Manually";
+    buttons.innerHTML = `
+    <i class='fas fa-plus'></i> New track
+    <button class="input-btn" onclick='showSpotifyInput()' id='spotify'>spotify URI</button>
+    <button class="input-btn" onclick='showManualInput()'>Manually</button>
+    `;
     newTrack.appendChild(buttons);
   }
 
@@ -206,21 +252,26 @@ include __DIR__.'/../inc/header.php';
     let trackName;
     let artistName;
     let method;
-    for (let input of e.path[6]) {
-      if (input.name == "tracks[]") {
-        tracks.push(input.value);
-      }
-      if (input.name == "spotify") {
-        spotify = input.value;
-        method = "spotify";
-      }
-      if (input.name == "track-name") {
-        trackName = input.value;
-        method = "manual";
-      }
-      if (input.name == "artist-name") {
-        artistName = input.value;
-        method = "manual";
+    let form = e.path.find((element) => {
+      return element.tagName == "FORM";
+    })
+    if (form) {
+      for (let input of form) {
+        if (input.name == "tracks[]") {
+          tracks.push(input.value);
+        }
+        if (input.name == "spotify") {
+          spotify = input.value;
+          method = "spotify";
+        }
+        if (input.name == "track-name") {
+          trackName = input.value;
+          method = "manual";
+        }
+        if (input.name == "artist-name") {
+          artistName = input.value;
+          method = "manual";
+        }
       }
     }
     tracks=JSON.stringify(tracks);
@@ -242,43 +293,45 @@ include __DIR__.'/../inc/header.php';
         if (request.error) {
           alert(request.error);
         }
-        if (request.artist) {
-          let title = request.title;
-          let artist = request.artist;
-          let link = request.link;
-          let uri = document.getElementById("spotify");
-          let trackName = document.getElementById("track-name");
-          let artistName = document.getElementById("artist-name");
-          if (uri) {
-            console.log("hi")
-            uri.value = '';
+        if (request.success) {
+          for (track of request.tracks) {
+            let title = track.title;
+            let artist = track.artist;
+            let link = track.link;
+            let uri = document.getElementById("spotify");
+            let trackName = document.getElementById("track-name");
+            let artistName = document.getElementById("artist-name");
+            if (uri) {
+              uri.value = '';
+            }
+            if (trackName) {
+              trackName.value = "";
+              artistName.value = "";
+            }
+            let playlist = document.getElementById("track-list");
+            let tr = document.createElement('tr');
+            tr.setAttribute("id", `new${newId}`);
+            let td = document.createElement('td');
+            td.setAttribute("id", "track");
+            let input = document.createElement('input');
+            input.setAttribute("type", "hidden");
+            input.setAttribute("value", [title, artist, link].join("~#~"));
+            input.setAttribute("name", "tracks[]");
+            let button = document.createElement('button');
+            button.setAttribute("id",`delete`);
+            button.setAttribute("class","delete-track");
+            button.setAttribute("onclick", `deleteTrack('new${newId}')`)
+            button.innerHTML = "<i class='fas fa-times'></i>";
+            let label = document.createElement('label');
+            label.setAttribute("for", "tracks[]");
+            label.innerHTML = `${title} by ${artist}`;
+            newId ++
+            td.appendChild(input);
+            td.appendChild(label);
+            td.appendChild(button);
+            tr.appendChild(td);
+            playlist.appendChild(tr);
           }
-          if (trackName) {
-            trackName.value = "";
-            artistName.value = "";
-          }
-          let playlist = document.getElementById("track-list");
-          let tr = document.createElement('tr');
-          tr.setAttribute("id", newId);
-          let td = document.createElement('td');
-          td.setAttribute("id", "track");
-          let input = document.createElement('input');
-          input.setAttribute("type", "hidden");
-          input.setAttribute("value", [title, artist, link].join("~#~"));
-          input.setAttribute("name", "tracks[]");
-          let button = document.createElement('button');
-          button.setAttribute("id","button");
-          button.setAttribute("onclick", `deleteTrack(${newId})`)
-          button.innerHTML = "X";
-          let label = document.createElement('label');
-          label.setAttribute("for", "tracks[]");
-          label.innerHTML = `${title} by ${artist}`;
-          newId ++
-          td.appendChild(input);
-          td.appendChild(label);
-          td.appendChild(button);
-          tr.appendChild(td);
-          playlist.appendChild(tr);
         }
       } else {
         alert('There was a problem with the request.');

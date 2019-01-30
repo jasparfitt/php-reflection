@@ -12,22 +12,37 @@
     likeRequest.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
     likeRequest.send();
     let likeButton = document.getElementById(`like${id}`);
-    let NoL = document.getElementById(`NoL${id}`);
+    let userPlaylists = document.getElementById("user-playlists");
+    let NoL;
+    let NoLs;
+    if (userPlaylists) {
+      NoLs = document.getElementsByClassName(`NoL${id}`)
+    } else {
+      NoL = document.getElementById(`NoL${id}`);
+    }
     let litNoL
     if (NoL) {
       litNoL = parseInt(NoL.innerHTML.substr(7));
+    } else if (NoLs) {
+      litNoL = parseInt(NoLs[0].innerHTML.substr(7));
     }
-    if (likeButton.getAttribute('class') == "disabled") {
-      likeButton.innerHTML = "Like";
+    if (likeButton.getAttribute('class').includes("disabled")) {
       likeButton.classList.remove("disabled");
       if (NoL) {
         NoL.innerHTML = `Likes: ${litNoL - 1}`;
+      } else if (NoLs) {
+        for (NoL of NoLs) {
+          NoL.innerHTML = `Likes: ${litNoL - 1}`;
+        }
       }
     } else {
-      likeButton.innerHTML = "Liked";
       likeButton.classList.add("disabled");
       if (NoL) {
         NoL.innerHTML = `Likes: ${litNoL + 1}`;
+      } else if (NoLs) {
+        for (NoL of NoLs) {
+          NoL.innerHTML = `Likes: ${litNoL + 1}`;
+        }
       }
     }
   }
