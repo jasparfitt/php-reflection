@@ -13,19 +13,12 @@
   }
 
   include __DIR__.'/../inc/header.php';
+  include __DIR__.'/../inc/error-message.php';
   ?>
   <main>
     <div class="margin-box register-page">
       <h1>Register</h1>
       <form action="/register" method="post">
-        <?php if(isset($_COOKIE["msg"])) { ?>
-        <p class="error-msg">
-          <?php
-          echo $_COOKIE["msg"];
-          destroyCookie('msg');
-          ?>
-        </p>
-        <?php }?>
         <table>
           <tr>
             <td class="label">
@@ -73,3 +66,4 @@
       </form>
     </div>
   </main>
+<?php include __DIR__."/../inc/error-message-code.php"; ?>

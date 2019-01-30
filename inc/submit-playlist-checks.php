@@ -42,16 +42,22 @@
   session_start();
   $_SESSION['playlist'] = $playlist;
   session_write_close();
+  // check length
+  if (sizeof($cleanTracks) >= 100) {
+    return $res->withStatus(302)
+               ->withHeader('Location', $app->getContainer()->get('router')->pathFor($redirect, $pattern))
+               ->withHeader('Set-Cookie', "msg=Maximum playlist length of 100 exceeded; Domain=".getenv("COOKIE_DOMAIN")."; Path=/");
+  }
   // check user is logged in and get userId if not redirect
   if (isAuthenticated()) {
     $userId = getUserId();
     if ($userId === false) {
-      return $res->withStatus(302)
-                 ->withHeader('Location', $app->getContainer()->get('router')->pathFor($redirect, $pattern));
+      $res = $this->view->render($res, '/login.php', ['forced' => true, 'redirect' => $redirect, 'pattern_key' => $pattern_key, 'pattern_value' => $playlistId]);
+      return $res;
     }
   } else {
-    return $res->withStatus(302)
-               ->withHeader('Location', $app->getContainer()->get('router')->pathFor($redirect, $pattern));
+    $res = $this->view->render($res, '/login.php', ['forced' => true, 'redirect' => $redirect, 'pattern_key' => $pattern_key, 'pattern_value' => $playlistId]);
+    return $res;
   }
 
   // check that playlist has title

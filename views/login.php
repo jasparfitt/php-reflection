@@ -6,7 +6,16 @@
     $pattern_value = '';
   }
   include __DIR__.'/../inc/header.php';
+  include __DIR__.'/../inc/error-message.php';
   ?>
+  <?php if(isset($_COOKIE["msg"])) { ?>
+    <div class="error-msg">
+        <?php
+        echo $_COOKIE["msg"];
+        destroyCookie('msg');
+        ?>
+    </div>
+  <?php }?>
   <main>
     <div class="margin-box login-page">
       <?php if ($forced) { ?>
@@ -15,14 +24,6 @@
         <h1>Login</h1>
       <?php } ?>
       <form action="/login" method="post">
-        <?php if(isset($_COOKIE["msg"])) { ?>
-        <p class="error-msg">
-          <?php
-          echo $_COOKIE["msg"];
-          destroyCookie('msg');
-          ?>
-        </p>
-        <?php }?>
         <table>
           <tr>
             <td class="label">
@@ -53,3 +54,4 @@
       </form>
     </div>
   </main>
+<?php include __DIR__."/../inc/error-message-code.php"; ?>

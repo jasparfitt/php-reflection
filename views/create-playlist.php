@@ -30,18 +30,11 @@ if (isset($_COOKIE["artistName"])) {
 }
 
 include __DIR__.'/../inc/header.php';
+include __DIR__.'/../inc/error-message.php';
 ?>
 <main>
   <div class='margin-box'>
     <h1><?php echo $name; ?></h1>
-    <?php if(isset($_COOKIE["msg"])) { ?>
-    <p class="error-msg">
-      <?php
-      echo $_COOKIE["msg"];
-      destroyCookie('msg');
-      ?>
-    </p>
-    <?php }?>
       <form method="post" action="<?php echo $postTo; ?>">
         <table>
           <tbody id="track-list">
@@ -122,13 +115,14 @@ include __DIR__.'/../inc/header.php';
             </tr>
           </tfoot>
         </table>
-        <input class="submit-btn" type="submit" onclick="overlay()" value="Save Playlist" name="finish"/>
+        <input id="finish-btn" <?php if (empty($tracks)) {echo 'disabled';} ?> class="submit-btn" type="submit" onclick="overlay()" value="Save Playlist" name="finish"/>
         <input type="hidden" name="redirect" value="<?php echo $redirect; ?>">
         <input type="hidden" name="pattern-key" value="<?php echo $pattern_key; ?>">
         <input type="hidden" name="pattern-value" value="<?php echo $pattern_value; ?>">
       </form>
   </div>
 </main>
+<?php include __DIR__."/../inc/error-message-code.php"; ?>
 <script>
   let newTrack = document.getElementById('new-track');
   let spotify = document.getElementById('spotify');
@@ -289,11 +283,14 @@ include __DIR__.'/../inc/header.php';
   let alertContents = () => {
     if (httpRequest.readyState === XMLHttpRequest.DONE) {
       if (httpRequest.status === 200) {
+        console.log("response: "+httpRequest.responseText);
         request = JSON.parse(httpRequest.responseText);
         if (request.error) {
           alert(request.error);
         }
         if (request.success) {
+          let finish = document.getElementById("finish-btn");
+          finish.removeAttribute("disabled");
           for (track of request.tracks) {
             let title = track.title;
             let artist = track.artist;

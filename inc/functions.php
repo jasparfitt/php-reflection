@@ -25,6 +25,7 @@ function callApi($url, $redirect=false) {
   try {
     session_name("token");
     session_id("token");
+    session_set_cookie_params(3400,'/',getenv("COOKIE_DOMAIN"));
     session_start();
     $header = "Content-Type: application/x-www-form-urlencoded\n".
               "Authorization: Bearer ".$_SESSION['token']->access_token;
@@ -49,18 +50,15 @@ function callApi($url, $redirect=false) {
     restore_error_handler();
     return $data;
   } catch (Exception $e) {
-    restore_error_handler();
     $message = $e->getMessage();
     if ($redirect) {
-      echo $e->getMessage();
-      die("died from exception");
+      return ["error"=>$e->getMessage()];
     }
     if (strpos($message, "401") !== false) {
       destroyCookie('token');
-      callApi($url, true);
+      return callApi($url, true);
     } else {
-      echo $e->getMessage();
-      die("died from exception");
+      return ["error"=>$e->getMessage()];
     }
   }
 }

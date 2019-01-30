@@ -5,10 +5,25 @@ body {
   flex-direction: column;
 
 }
+input[disabled] {
+  color: gray;
+  cursor: unset;
+}
+
+input[disabled]:hover {
+  cursor: unset;
+}
 
 main {
   overflow-y: scroll;
   flex: 1;
+}
+
+.error-msg {
+  text-align: center;
+  background-color: #00b5cc;
+  color: #013243;
+  padding: 0.5rem;
 }
 
 .overlay {
@@ -25,6 +40,10 @@ main {
   font-size: 3rem;
   font-weight: bold;
   cursor: wait;
+}
+
+.error-btn {
+  background-color: transparent;
 }
 
 .overlay-info {
@@ -131,6 +150,7 @@ header {
   margin-left: auto;
   background-color: white;
   color: black;
+  padding: 5px;
 }
 
 .search-button {

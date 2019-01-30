@@ -946,8 +946,9 @@
       $tracks = json_decode($tracks);
     }
     // if playlist is 50 tracks or longer redirect with message
-    if (sizeof($tracks) >= 50) {
+    if (sizeof($tracks) >= 100) {
       echo json_encode(["error" => "Maximum playlist length reached"]);
+      die();
     }
     // if spotify URI is submitted
     if ($req->getParsedBody()['method'] == "spotify") {
@@ -974,10 +975,14 @@
 
         // if no track is returned redirect with message
         if (empty($track)) {
-          echo json_encode(["error" => "Could not get track from spotify. Please enter a valid URI"]);
+          echo json_encode(["error" => "Could not get track from spotify. Please enter a valid URI."]);
           die();
         }
 
+        if (is_array($track)) {
+          echo json_encode(["error" => "An unknown error occured please try again. "]);
+          die();
+        }
         // get song title, artist and link from data
         $trackName = $track->name;
         foreach ($track->artists as $artist) {
@@ -1013,6 +1018,10 @@
         // if no track is returned redirect with message
         if (empty($tracks)) {
           echo json_encode(["error" => "Could not get track from spotify. Please enter a valid URI"]);
+          die();
+        }
+        if (isset($tracks["error"])) {
+          echo json_encode(["error" => "An unknown error occured please try again."]);
           die();
         }
         // var_dump($playlistTracks);
